@@ -1,0 +1,161 @@
+package admin
+
+import (
+	"fmt"
+	"github.com/forgecommerce/api/templates/layouts"
+)
+
+type CategoryListItem struct {
+	ID           string
+	Name         string
+	Slug         string
+	ProductCount int
+	IsActive     bool
+	ParentName   string
+	Position     int
+}
+
+templ CategoryListPage(categories []CategoryListItem, csrfToken string) {
+	@layouts.AdminLayout("Categories", "/admin/categories") {
+		<div class="page-header flex justify-between items-center">
+			<h2>Categories</h2>
+			<a href="/admin/categories/new" class="btn btn-primary">+ New Category</a>
+		</div>
+		<div class="card">
+			<div class="table-container">
+				<table>
+					<thead>
+						<tr>
+							<th>Name</th>
+							<th>Slug</th>
+							<th>Parent</th>
+							<th>Products</th>
+							<th>Active</th>
+							<th>Actions</th>
+						</tr>
+					</thead>
+					<tbody>
+						if len(categories) == 0 {
+							<tr>
+								<td colspan="6" class="text-center text-muted" style="padding: 40px;">
+									No categories yet. <a href="/admin/categories/new">Create one.</a>
+								</td>
+							</tr>
+						}
+						for _, c := range categories {
+							<tr>
+								<td><a href={ templ.SafeURL("/admin/categories/" + c.ID) }>{ c.Name }</a></td>
+								<td class="text-muted">{ c.Slug }</td>
+								<td class="text-muted">{ c.ParentName }</td>
+								<td>{ fmt.Sprintf("%d", c.ProductCount) }</td>
+								<td>
+									if c.IsActive {
+										<span class="badge badge-success">Active</span>
+									} else {
+										<span class="badge badge-muted">Inactive</span>
+									}
+								</td>
+								<td>
+									<a href={ templ.SafeURL("/admin/categories/" + c.ID) } class="btn btn-sm">Edit</a>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	}
+}
+
+type CategoryFormData struct {
+	ID          string
+	Name        string
+	Slug        string
+	Description string
+	ParentID    string
+	Position    string
+	SEOTitle    string
+	SEODesc     string
+	IsActive    bool
+	IsNew       bool
+	CSRFToken   string
+	Error       string
+	Parents     []CategoryOption
+}
+
+type CategoryOption struct {
+	ID   string
+	Name string
+}
+
+templ CategoryFormPage(data CategoryFormData) {
+	@layouts.AdminLayout("Category", "/admin/categories") {
+		<div class="page-header">
+			if data.IsNew {
+				<h2>New Category</h2>
+			} else {
+				<h2>Edit: { data.Name }</h2>
+			}
+		</div>
+		if data.Error != "" {
+			<div class="alert alert-error mb-2">{ data.Error }</div>
+		}
+		<div class="card">
+			<form
+				method="POST"
+				if data.IsNew {
+					action="/admin/categories"
+				} else {
+					action={ templ.SafeURL("/admin/categories/" + data.ID) }
+				}
+			>
+				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+				<div class="card-body">
+					<div class="form-grid">
+						<div class="form-group">
+							<label for="name">Name</label>
+							<input type="text" id="name" name="name" value={ data.Name } required/>
+						</div>
+						<div class="form-group">
+							<label for="slug">Slug</label>
+							<input type="text" id="slug" name="slug" value={ data.Slug } placeholder="auto-generated"/>
+						</div>
+						<div class="form-group">
+							<label for="parent_id">Parent Category</label>
+							<select id="parent_id" name="parent_id">
+								<option value="">None (top-level)</option>
+								for _, p := range data.Parents {
+									<option value={ p.ID } selected?={ data.ParentID == p.ID }>{ p.Name }</option>
+								}
+							</select>
+						</div>
+						<div class="form-group">
+							<label for="position">Position</label>
+							<input type="number" id="position" name="position" value={ data.Position } min="0"/>
+						</div>
+						<div class="form-group" style="grid-column: 1 / -1;">
+							<label for="description">Description</label>
+							<textarea id="description" name="description" rows="3">{ data.Description }</textarea>
+						</div>
+						<div class="form-group">
+							<label for="seo_title">SEO Title</label>
+							<input type="text" id="seo_title" name="seo_title" value={ data.SEOTitle }/>
+						</div>
+						<div class="form-group">
+							<label for="seo_description">SEO Description</label>
+							<input type="text" id="seo_description" name="seo_description" value={ data.SEODesc }/>
+						</div>
+					</div>
+				</div>
+				<div class="card-body" style="border-top: 1px solid var(--gray-200); display: flex; justify-content: flex-end; gap: 8px;">
+					<a href="/admin/categories" class="btn">Cancel</a>
+					if data.IsNew {
+						<button type="submit" class="btn btn-primary">Create Category</button>
+					} else {
+						<button type="submit" class="btn btn-primary">Save Changes</button>
+					}
+				</div>
+			</form>
+		</div>
+	}
+}

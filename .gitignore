@@ -40,6 +40,9 @@ coverage/
 *.so
 *.dylib
 
+# Go compiled binaries
+api/seed-admin
+
 # sqlc generated (tracked but worth noting)
 # api/internal/database/gen/
 

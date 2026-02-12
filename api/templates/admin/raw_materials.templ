@@ -1,0 +1,224 @@
+package admin
+
+import (
+	"fmt"
+	"github.com/forgecommerce/api/templates/layouts"
+)
+
+type RawMaterialListItem struct {
+	ID            string
+	Name          string
+	SKU           string
+	Category      string
+	Stock         string
+	Unit          string
+	CostPerUnit   string
+	IsActive      bool
+	IsLowStock    bool
+}
+
+type RawMaterialListData struct {
+	Materials  []RawMaterialListItem
+	Page       int
+	TotalPages int
+	Total      int
+	CategoryID string
+}
+
+templ RawMaterialListPage(data RawMaterialListData) {
+	@layouts.AdminLayout("Raw Materials", "/admin/inventory/raw-materials") {
+		<div class="page-header flex justify-between items-center">
+			<h2>Raw Materials ({ fmt.Sprintf("%d", data.Total) })</h2>
+			<a href="/admin/inventory/raw-materials/new" class="btn btn-primary">+ New Material</a>
+		</div>
+		<div class="card">
+			<div class="table-container">
+				<table>
+					<thead>
+						<tr>
+							<th>Material</th>
+							<th>SKU</th>
+							<th>Category</th>
+							<th>Stock</th>
+							<th>Unit</th>
+							<th>Cost/Unit</th>
+							<th>Status</th>
+							<th>Actions</th>
+						</tr>
+					</thead>
+					<tbody>
+						if len(data.Materials) == 0 {
+							<tr>
+								<td colspan="8" class="text-center text-muted" style="padding: 40px;">
+									No raw materials found. <a href="/admin/inventory/raw-materials/new">Add your first material.</a>
+								</td>
+							</tr>
+						}
+						for _, m := range data.Materials {
+							<tr>
+								<td><a href={ templ.SafeURL("/admin/inventory/raw-materials/" + m.ID) }>{ m.Name }</a></td>
+								<td class="text-muted">{ m.SKU }</td>
+								<td class="text-muted">{ m.Category }</td>
+								<td>
+									if m.IsLowStock {
+										<span class="badge badge-danger">{ m.Stock }</span>
+									} else {
+										{ m.Stock }
+									}
+								</td>
+								<td>{ m.Unit }</td>
+								<td>{ m.CostPerUnit }</td>
+								<td>
+									if m.IsActive {
+										<span class="badge badge-success">Active</span>
+									} else {
+										<span class="badge badge-muted">Inactive</span>
+									}
+								</td>
+								<td>
+									<a href={ templ.SafeURL("/admin/inventory/raw-materials/" + m.ID) } class="btn btn-sm">Edit</a>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+			if data.TotalPages > 1 {
+				<div class="card-body flex justify-between items-center">
+					<span class="text-muted">
+						Page { fmt.Sprintf("%d", data.Page) } of { fmt.Sprintf("%d", data.TotalPages) }
+					</span>
+					<div class="flex gap-2">
+						if data.Page > 1 {
+							<a href={ templ.SafeURL(fmt.Sprintf("/admin/inventory/raw-materials?page=%d", data.Page-1)) } class="btn btn-sm">&larr; Prev</a>
+						}
+						if data.Page < data.TotalPages {
+							<a href={ templ.SafeURL(fmt.Sprintf("/admin/inventory/raw-materials?page=%d", data.Page+1)) } class="btn btn-sm">Next &rarr;</a>
+						}
+					</div>
+				</div>
+			}
+		</div>
+	}
+}
+
+type RawMaterialCategory struct {
+	ID   string
+	Name string
+}
+
+type RawMaterialFormData struct {
+	ID                string
+	Name              string
+	SKU               string
+	Description       string
+	CategoryID        string
+	UnitOfMeasure     string
+	CostPerUnit       string
+	StockQuantity     string
+	LowStockThreshold string
+	SupplierName      string
+	SupplierSku       string
+	LeadTimeDays      string
+	IsActive          bool
+	IsNew             bool
+	CSRFToken         string
+	Error             string
+	Categories        []RawMaterialCategory
+}
+
+templ RawMaterialFormPage(data RawMaterialFormData) {
+	@layouts.AdminLayout("Raw Material", "/admin/inventory/raw-materials") {
+		<div class="page-header">
+			if data.IsNew {
+				<h2>New Raw Material</h2>
+			} else {
+				<h2>Edit: { data.Name }</h2>
+			}
+		</div>
+		if data.Error != "" {
+			<div class="alert alert-error mb-2">{ data.Error }</div>
+		}
+		<div class="card">
+			<form
+				method="POST"
+				if data.IsNew {
+					action="/admin/inventory/raw-materials"
+				} else {
+					action={ templ.SafeURL("/admin/inventory/raw-materials/" + data.ID) }
+				}
+			>
+				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+				<div class="card-body">
+					<div class="form-grid">
+						<div class="form-group">
+							<label for="name">Material Name</label>
+							<input type="text" id="name" name="name" value={ data.Name } required/>
+						</div>
+						<div class="form-group">
+							<label for="sku">SKU</label>
+							<input type="text" id="sku" name="sku" value={ data.SKU } required/>
+						</div>
+						<div class="form-group">
+							<label for="category_id">Category</label>
+							<select id="category_id" name="category_id">
+								<option value="">None</option>
+								for _, c := range data.Categories {
+									<option value={ c.ID } selected?={ data.CategoryID == c.ID }>{ c.Name }</option>
+								}
+							</select>
+						</div>
+						<div class="form-group">
+							<label for="unit_of_measure">Unit of Measure</label>
+							<select id="unit_of_measure" name="unit_of_measure">
+								<option value="piece" selected?={ data.UnitOfMeasure == "piece" }>Piece</option>
+								<option value="meter" selected?={ data.UnitOfMeasure == "meter" }>Meter</option>
+								<option value="sq_meter" selected?={ data.UnitOfMeasure == "sq_meter" }>Sq. Meter</option>
+								<option value="kg" selected?={ data.UnitOfMeasure == "kg" }>Kilogram</option>
+								<option value="gram" selected?={ data.UnitOfMeasure == "gram" }>Gram</option>
+								<option value="liter" selected?={ data.UnitOfMeasure == "liter" }>Liter</option>
+								<option value="ml" selected?={ data.UnitOfMeasure == "ml" }>Milliliter</option>
+							</select>
+						</div>
+						<div class="form-group">
+							<label for="cost_per_unit">Cost Per Unit (EUR)</label>
+							<input type="number" id="cost_per_unit" name="cost_per_unit" step="0.01" min="0" value={ data.CostPerUnit } required/>
+						</div>
+						<div class="form-group">
+							<label for="stock_quantity">Stock Quantity</label>
+							<input type="number" id="stock_quantity" name="stock_quantity" step="0.01" min="0" value={ data.StockQuantity } required/>
+						</div>
+						<div class="form-group">
+							<label for="low_stock_threshold">Low Stock Threshold</label>
+							<input type="number" id="low_stock_threshold" name="low_stock_threshold" step="0.01" min="0" value={ data.LowStockThreshold }/>
+						</div>
+						<div class="form-group">
+							<label for="lead_time_days">Lead Time (Days)</label>
+							<input type="number" id="lead_time_days" name="lead_time_days" min="0" value={ data.LeadTimeDays }/>
+						</div>
+						<div class="form-group">
+							<label for="supplier_name">Supplier Name</label>
+							<input type="text" id="supplier_name" name="supplier_name" value={ data.SupplierName }/>
+						</div>
+						<div class="form-group">
+							<label for="supplier_sku">Supplier SKU</label>
+							<input type="text" id="supplier_sku" name="supplier_sku" value={ data.SupplierSku }/>
+						</div>
+						<div class="form-group" style="grid-column: 1 / -1;">
+							<label for="description">Description</label>
+							<textarea id="description" name="description" rows="3">{ data.Description }</textarea>
+						</div>
+					</div>
+				</div>
+				<div class="card-body" style="border-top: 1px solid var(--gray-200); display: flex; justify-content: flex-end; gap: 8px;">
+					<a href="/admin/inventory/raw-materials" class="btn">Cancel</a>
+					if data.IsNew {
+						<button type="submit" class="btn btn-primary">Create Material</button>
+					} else {
+						<button type="submit" class="btn btn-primary">Save Changes</button>
+					}
+				</div>
+			</form>
+		</div>
+	}
+}

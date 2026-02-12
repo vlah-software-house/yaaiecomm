@@ -1,0 +1,223 @@
+package admin
+
+import (
+	"fmt"
+	"github.com/forgecommerce/api/templates/layouts"
+)
+
+type ProductListItem struct {
+	ID        string
+	Name      string
+	SKU       string
+	Status    string
+	Price     string
+	Stock     int
+	CreatedAt string
+}
+
+type ProductListData struct {
+	Products   []ProductListItem
+	Page       int
+	TotalPages int
+	Total      int
+	Status     string
+}
+
+templ ProductListPage(data ProductListData) {
+	@layouts.AdminLayout("Products", "/admin/products") {
+		<div class="page-header flex justify-between items-center">
+			<h2>Products ({ fmt.Sprintf("%d", data.Total) })</h2>
+			<a href="/admin/products/new" class="btn btn-primary">+ New Product</a>
+		</div>
+		<div class="card">
+			<div class="card-header flex justify-between items-center">
+				<span>All Products</span>
+				<div class="flex gap-2">
+					<select
+						hx-get="/admin/products"
+						hx-target="body"
+						hx-push-url="true"
+						name="status"
+						class="btn btn-sm"
+					>
+						<option value="" selected?={ data.Status == "" }>All Statuses</option>
+						<option value="active" selected?={ data.Status == "active" }>Active</option>
+						<option value="draft" selected?={ data.Status == "draft" }>Draft</option>
+						<option value="archived" selected?={ data.Status == "archived" }>Archived</option>
+					</select>
+				</div>
+			</div>
+			<div class="table-container">
+				<table>
+					<thead>
+						<tr>
+							<th>Product</th>
+							<th>SKU</th>
+							<th>Status</th>
+							<th>Price</th>
+							<th>Stock</th>
+							<th>Actions</th>
+						</tr>
+					</thead>
+					<tbody>
+						if len(data.Products) == 0 {
+							<tr>
+								<td colspan="6" class="text-center text-muted" style="padding: 40px;">
+									No products found. <a href="/admin/products/new">Create your first product.</a>
+								</td>
+							</tr>
+						}
+						for _, p := range data.Products {
+							<tr>
+								<td><a href={ templ.SafeURL("/admin/products/" + p.ID) }>{ p.Name }</a></td>
+								<td class="text-muted">{ p.SKU }</td>
+								<td>
+									<span class={ "badge", statusBadgeClass(p.Status) }>{ p.Status }</span>
+								</td>
+								<td>{ p.Price }</td>
+								<td>{ fmt.Sprintf("%d", p.Stock) }</td>
+								<td>
+									<a href={ templ.SafeURL("/admin/products/" + p.ID) } class="btn btn-sm">Edit</a>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+			if data.TotalPages > 1 {
+				<div class="card-body flex justify-between items-center">
+					<span class="text-muted">
+						Page { fmt.Sprintf("%d", data.Page) } of { fmt.Sprintf("%d", data.TotalPages) }
+					</span>
+					<div class="flex gap-2">
+						if data.Page > 1 {
+							<a href={ templ.SafeURL(fmt.Sprintf("/admin/products?page=%d&status=%s", data.Page-1, data.Status)) } class="btn btn-sm">&larr; Prev</a>
+						}
+						if data.Page < data.TotalPages {
+							<a href={ templ.SafeURL(fmt.Sprintf("/admin/products?page=%d&status=%s", data.Page+1, data.Status)) } class="btn btn-sm">Next &rarr;</a>
+						}
+					</div>
+				</div>
+			}
+		</div>
+	}
+}
+
+func statusBadgeClass(status string) string {
+	switch status {
+	case "active":
+		return "badge-success"
+	case "draft":
+		return "badge-warning"
+	case "archived":
+		return "badge-muted"
+	default:
+		return ""
+	}
+}
+
+type ProductFormData struct {
+	ID               string
+	Name             string
+	Slug             string
+	Description      string
+	ShortDescription string
+	Status           string
+	SKUPrefix        string
+	BasePrice        string
+	CompareAtPrice   string
+	HasVariants      bool
+	WeightGrams      string
+	SEOTitle         string
+	SEODescription   string
+	IsNew            bool
+	CSRFToken        string
+	Error            string
+}
+
+templ ProductFormPage(data ProductFormData) {
+	@layouts.AdminLayout("Product", "/admin/products") {
+		<div class="page-header">
+			if data.IsNew {
+				<h2>New Product</h2>
+			} else {
+				<h2>Edit: { data.Name }</h2>
+			}
+		</div>
+		if data.Error != "" {
+			<div class="alert alert-error mb-2">{ data.Error }</div>
+		}
+		<div class="card">
+			<form
+				method="POST"
+				if data.IsNew {
+					action="/admin/products"
+				} else {
+					action={ templ.SafeURL("/admin/products/" + data.ID) }
+				}
+			>
+				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+				<div class="card-body">
+					<div class="form-grid">
+						<div class="form-group">
+							<label for="name">Product Name</label>
+							<input type="text" id="name" name="name" value={ data.Name } required/>
+						</div>
+						<div class="form-group">
+							<label for="slug">Slug</label>
+							<input type="text" id="slug" name="slug" value={ data.Slug } placeholder="auto-generated"/>
+						</div>
+						<div class="form-group">
+							<label for="sku_prefix">SKU Prefix</label>
+							<input type="text" id="sku_prefix" name="sku_prefix" value={ data.SKUPrefix }/>
+						</div>
+						<div class="form-group">
+							<label for="status">Status</label>
+							<select id="status" name="status">
+								<option value="draft" selected?={ data.Status == "draft" }>Draft</option>
+								<option value="active" selected?={ data.Status == "active" }>Active</option>
+								<option value="archived" selected?={ data.Status == "archived" }>Archived</option>
+							</select>
+						</div>
+						<div class="form-group">
+							<label for="base_price">Base Price (EUR)</label>
+							<input type="number" id="base_price" name="base_price" step="0.01" min="0" value={ data.BasePrice } required/>
+						</div>
+						<div class="form-group">
+							<label for="compare_at_price">Compare At Price</label>
+							<input type="number" id="compare_at_price" name="compare_at_price" step="0.01" min="0" value={ data.CompareAtPrice }/>
+						</div>
+						<div class="form-group" style="grid-column: 1 / -1;">
+							<label for="short_description">Short Description</label>
+							<input type="text" id="short_description" name="short_description" value={ data.ShortDescription }/>
+						</div>
+						<div class="form-group" style="grid-column: 1 / -1;">
+							<label for="description">Description</label>
+							<textarea id="description" name="description" rows="6">{ data.Description }</textarea>
+						</div>
+						<div class="form-group">
+							<label for="weight_grams">Weight (grams)</label>
+							<input type="number" id="weight_grams" name="weight_grams" value={ data.WeightGrams }/>
+						</div>
+						<div class="form-group">
+							<label for="seo_title">SEO Title</label>
+							<input type="text" id="seo_title" name="seo_title" value={ data.SEOTitle }/>
+						</div>
+						<div class="form-group">
+							<label for="seo_description">SEO Description</label>
+							<input type="text" id="seo_description" name="seo_description" value={ data.SEODescription }/>
+						</div>
+					</div>
+				</div>
+				<div class="card-body" style="border-top: 1px solid var(--gray-200); display: flex; justify-content: flex-end; gap: 8px;">
+					<a href="/admin/products" class="btn">Cancel</a>
+					if data.IsNew {
+						<button type="submit" class="btn btn-primary">Create Product</button>
+					} else {
+						<button type="submit" class="btn btn-primary">Save Changes</button>
+					}
+				</div>
+			</form>
+		</div>
+	}
+}
