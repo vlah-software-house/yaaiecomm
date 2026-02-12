@@ -121,7 +121,6 @@ func LoadDev() *Config {
 			},
 		}
 	}
-	_ = err
 	return cfg
 }
 

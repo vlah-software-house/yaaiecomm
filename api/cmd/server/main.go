@@ -10,8 +10,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/forgecommerce/api/internal/auth"
 	"github.com/forgecommerce/api/internal/config"
 	"github.com/forgecommerce/api/internal/database"
+	adminhandlers "github.com/forgecommerce/api/internal/handlers/admin"
+	"github.com/forgecommerce/api/internal/middleware"
 )
 
 func main() {
@@ -40,16 +43,48 @@ func main() {
 
 	slog.Info("migrations complete")
 
+	// Initialize auth service
+	sessionMgr := auth.NewSessionManager(pool, 8*time.Hour)
+	authService := auth.NewService(pool, sessionMgr, logger, cfg.TOTPIssuer)
+
+	// Initialize admin handlers
+	adminHandler := adminhandlers.NewHandler(authService, logger)
+
 	// Admin server (HTMX + templ)
 	adminMux := http.NewServeMux()
+
+	// Health check
 	adminMux.HandleFunc("GET /admin/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintln(w, `{"status":"ok"}`)
 	})
 
+	// Static files
+	adminMux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+
+	// Public admin routes (login, 2FA)
+	adminHandler.RegisterRoutes(adminMux)
+
+	// Protected admin routes — wrap in auth middleware
+	protectedMux := http.NewServeMux()
+	adminHandler.RegisterProtectedRoutes(protectedMux)
+	adminMux.Handle("/admin/", middleware.RequireAuth(authService)(protectedMux))
+
+	// Root redirect
+	adminMux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+	})
+
+	// Apply global middleware stack
+	var adminChain http.Handler = adminMux
+	adminChain = middleware.CSRF(adminChain)
+	adminChain = middleware.SecurityHeaders(adminChain)
+	adminChain = middleware.Recover(logger)(adminChain)
+	adminChain = middleware.RequestLogger(logger)(adminChain)
+
 	adminServer := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.AdminPort),
-		Handler:      adminMux,
+		Handler:      adminChain,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
