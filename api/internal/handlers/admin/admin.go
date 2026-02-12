@@ -34,7 +34,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/login/2fa", h.ShowTwoFactor)
 	mux.HandleFunc("POST /admin/login/2fa", h.HandleTwoFactor)
 
-	// Protected routes (auth required) — registered via RegisterProtectedRoutes
+	// Semi-public routes (require pending 2FA cookie, not full session)
+	mux.HandleFunc("GET /admin/setup-2fa", h.ShowSetup2FA)
+	mux.HandleFunc("POST /admin/setup-2fa/confirm", h.HandleConfirm2FA)
 }
 
 // RegisterProtectedRoutes registers routes that require authentication.
@@ -42,8 +44,6 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 func (h *Handler) RegisterProtectedRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/dashboard", h.ShowDashboard)
 	mux.HandleFunc("POST /admin/logout", h.HandleLogout)
-	mux.HandleFunc("GET /admin/setup-2fa", h.ShowSetup2FA)
-	mux.HandleFunc("POST /admin/setup-2fa/confirm", h.HandleConfirm2FA)
 }
 
 // ShowLogin renders the admin login page.

@@ -1,0 +1,17 @@
+{
+  "name": "forgecommerce-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ForgeCommerce E2E tests",
+  "scripts": {
+    "test": "npx playwright test",
+    "test:headed": "npx playwright test --headed",
+    "test:ui": "npx playwright test --ui",
+    "test:critical": "npx playwright test --grep @critical",
+    "report": "npx playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "typescript": "^5.9.3"
+  }
+}
