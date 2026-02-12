@@ -1,0 +1,71 @@
+package layouts
+
+templ Base(title string) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>{ title } — ForgeCommerce Admin</title>
+			<script src="https://unpkg.com/htmx.org@2.0.4"></script>
+			<script defer src="https://unpkg.com/alpinejs@3.14.8/dist/cdn.min.js"></script>
+			<link rel="stylesheet" href="/static/css/admin.css"/>
+		</head>
+		<body class="bg-gray-50 text-gray-900">
+			{ children... }
+		</body>
+	</html>
+}
+
+templ AdminLayout(title string, currentPath string) {
+	@Base(title) {
+		<div class="admin-layout" x-data="{ sidebarOpen: true }">
+			<!-- Sidebar -->
+			<aside class="sidebar" :class="{ 'sidebar-collapsed': !sidebarOpen }">
+				<div class="sidebar-header">
+					<h1 class="logo">FC</h1>
+					<span class="logo-text" x-show="sidebarOpen">ForgeCommerce</span>
+				</div>
+				<nav class="sidebar-nav">
+					@navItem("/admin/dashboard", "Dashboard", currentPath)
+					@navItem("/admin/products", "Products", currentPath)
+					@navItem("/admin/categories", "Categories", currentPath)
+					@navItem("/admin/inventory/raw-materials", "Raw Materials", currentPath)
+					@navItem("/admin/orders", "Orders", currentPath)
+					@navItem("/admin/customers", "Customers", currentPath)
+					@navItem("/admin/reports/sales", "Reports", currentPath)
+					<hr class="nav-divider"/>
+					@navItem("/admin/settings/vat", "VAT Settings", currentPath)
+					@navItem("/admin/settings/countries", "Selling Countries", currentPath)
+					@navItem("/admin/users", "Admin Users", currentPath)
+				</nav>
+			</aside>
+			<!-- Main content -->
+			<main class="main-content">
+				<header class="top-bar">
+					<button class="btn-icon" @click="sidebarOpen = !sidebarOpen">
+						&#9776;
+					</button>
+					<div class="top-bar-right">
+						<div id="flash-messages" hx-swap-oob="true"></div>
+						<form method="POST" action="/admin/logout">
+							<button type="submit" class="btn btn-sm">Logout</button>
+						</form>
+					</div>
+				</header>
+				<div class="content-area">
+					{ children... }
+				</div>
+			</main>
+		</div>
+	}
+}
+
+templ navItem(href string, label string, currentPath string) {
+	<a
+		href={ templ.SafeURL(href) }
+		class={ "nav-link", templ.KV("nav-link-active", currentPath == href) }
+	>
+		{ label }
+	</a>
+}

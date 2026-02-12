@@ -1,0 +1,136 @@
+package admin
+
+import "github.com/forgecommerce/api/templates/layouts"
+
+templ LoginPage(errorMsg string, csrfToken string) {
+	@layouts.Base("Login") {
+		<div class="login-container">
+			<div class="login-card">
+				<div class="login-header">
+					<h1>ForgeCommerce</h1>
+					<p>Admin Panel</p>
+				</div>
+				if errorMsg != "" {
+					<div class="alert alert-error">{ errorMsg }</div>
+				}
+				<form method="POST" action="/admin/login" class="login-form">
+					<input type="hidden" name="csrf_token" value={ csrfToken }/>
+					<div class="form-group">
+						<label for="email">Email</label>
+						<input type="email" id="email" name="email" required autofocus placeholder="admin@example.com"/>
+					</div>
+					<div class="form-group">
+						<label for="password">Password</label>
+						<input type="password" id="password" name="password" required placeholder="Enter your password"/>
+					</div>
+					<button type="submit" class="btn btn-primary btn-full">Sign In</button>
+				</form>
+			</div>
+		</div>
+	}
+}
+
+templ TwoFactorPage(errorMsg string, csrfToken string, showRecovery bool) {
+	@layouts.Base("Two-Factor Authentication") {
+		<div class="login-container">
+			<div class="login-card">
+				<div class="login-header">
+					<h1>Two-Factor Authentication</h1>
+					if showRecovery {
+						<p>Enter a recovery code</p>
+					} else {
+						<p>Enter the 6-digit code from your authenticator app</p>
+					}
+				</div>
+				if errorMsg != "" {
+					<div class="alert alert-error">{ errorMsg }</div>
+				}
+				if showRecovery {
+					<form method="POST" action="/admin/login/2fa" class="login-form">
+						<input type="hidden" name="csrf_token" value={ csrfToken }/>
+						<input type="hidden" name="type" value="recovery"/>
+						<div class="form-group">
+							<label for="code">Recovery Code</label>
+							<input type="text" id="code" name="code" required autofocus placeholder="XXXX-XXXX" autocomplete="off"/>
+						</div>
+						<button type="submit" class="btn btn-primary btn-full">Verify</button>
+					</form>
+					<p class="text-center mt-2">
+						<a href="/admin/login/2fa">Use authenticator code instead</a>
+					</p>
+				} else {
+					<form method="POST" action="/admin/login/2fa" class="login-form">
+						<input type="hidden" name="csrf_token" value={ csrfToken }/>
+						<input type="hidden" name="type" value="totp"/>
+						<div class="form-group">
+							<label for="code">Authentication Code</label>
+							<input type="text" id="code" name="code" required autofocus pattern="[0-9]{6}" maxlength="6" placeholder="000000" autocomplete="off" inputmode="numeric"/>
+						</div>
+						<button type="submit" class="btn btn-primary btn-full">Verify</button>
+					</form>
+					<p class="text-center mt-2">
+						<a href="/admin/login/2fa?recovery=true">Use recovery code instead</a>
+					</p>
+				}
+			</div>
+		</div>
+	}
+}
+
+templ Setup2FAPage(qrCodeBase64 string, secret string, csrfToken string, errorMsg string) {
+	@layouts.Base("Set Up Two-Factor Authentication") {
+		<div class="login-container">
+			<div class="login-card login-card-wide">
+				<div class="login-header">
+					<h1>Set Up 2FA</h1>
+					<p>Scan the QR code with your authenticator app</p>
+				</div>
+				if errorMsg != "" {
+					<div class="alert alert-error">{ errorMsg }</div>
+				}
+				<div class="setup-2fa">
+					<div class="qr-code">
+						<img src={ "data:image/png;base64," + qrCodeBase64 } alt="QR Code" width="200" height="200"/>
+					</div>
+					<p class="secret-key">
+						Manual entry key: <code>{ secret }</code>
+					</p>
+					<form method="POST" action="/admin/setup-2fa/confirm" class="login-form">
+						<input type="hidden" name="csrf_token" value={ csrfToken }/>
+						<div class="form-group">
+							<label for="code">Enter the 6-digit code to confirm setup</label>
+							<input type="text" id="code" name="code" required autofocus pattern="[0-9]{6}" maxlength="6" placeholder="000000" autocomplete="off" inputmode="numeric"/>
+						</div>
+						<button type="submit" class="btn btn-primary btn-full">Confirm &amp; Enable 2FA</button>
+					</form>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+templ RecoveryCodesPage(codes []string) {
+	@layouts.Base("Recovery Codes") {
+		<div class="login-container">
+			<div class="login-card login-card-wide">
+				<div class="login-header">
+					<h1>Save Your Recovery Codes</h1>
+					<p>Store these codes in a safe place. Each code can only be used once.</p>
+				</div>
+				<div class="recovery-codes">
+					<div class="codes-grid">
+						for _, code := range codes {
+							<code class="recovery-code">{ code }</code>
+						}
+					</div>
+					<div class="alert alert-warning mt-2">
+						These codes will not be shown again. Make sure to save them now.
+					</div>
+					<a href="/admin/dashboard" class="btn btn-primary btn-full mt-2">
+						I have saved my codes — Continue
+					</a>
+				</div>
+			</div>
+		</div>
+	}
+}
