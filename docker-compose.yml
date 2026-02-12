@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: forge-postgres
+    environment:
+      POSTGRES_DB: forgecommerce
+      POSTGRES_USER: forge
+      POSTGRES_PASSWORD: forgedev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forge -d forgecommerce"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: forge-mailpit
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+
+  stripe-mock:
+    image: stripe/stripe-mock:latest
+    container_name: forge-stripe-mock
+    ports:
+      - "12111:12111"  # HTTP
+      - "12112:12112"  # HTTPS
+
+volumes:
+  pgdata:

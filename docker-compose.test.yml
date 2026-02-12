@@ -1,0 +1,31 @@
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: forge-postgres-test
+    environment:
+      POSTGRES_DB: forgecommerce_test
+      POSTGRES_USER: forge
+      POSTGRES_PASSWORD: forgetest
+    ports:
+      - "5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forge -d forgecommerce_test"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+
+  mailpit-test:
+    image: axllent/mailpit:latest
+    container_name: forge-mailpit-test
+    ports:
+      - "1026:1025"
+      - "8026:8025"
+
+  stripe-mock-test:
+    image: stripe/stripe-mock:latest
+    container_name: forge-stripe-mock-test
+    ports:
+      - "12113:12111"
+      - "12114:12112"

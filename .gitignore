@@ -1,0 +1,47 @@
+# Environment
+.env
+.env.local
+
+# Go
+api/tmp/
+api/bin/
+
+# Node
+node_modules/
+storefront/.nuxt/
+storefront/.output/
+storefront/dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Media uploads
+media/
+
+# Test results
+test-results/
+playwright-report/
+
+# Coverage
+coverage/
+*.coverprofile
+
+# Build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+
+# sqlc generated (tracked but worth noting)
+# api/internal/database/gen/
+
+# templ generated
+*_templ.go
