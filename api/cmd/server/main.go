@@ -18,6 +18,7 @@ import (
 	"github.com/forgecommerce/api/internal/services/category"
 	"github.com/forgecommerce/api/internal/services/product"
 	"github.com/forgecommerce/api/internal/services/rawmaterial"
+	"github.com/forgecommerce/api/internal/vat"
 )
 
 func main() {
@@ -50,6 +51,11 @@ func main() {
 	sessionMgr := auth.NewSessionManager(pool, 8*time.Hour)
 	authService := auth.NewService(pool, sessionMgr, logger, cfg.TOTPIssuer)
 
+	// Initialize VAT services
+	vatCache := vat.NewRateCache()
+	vatSyncer := vat.NewRateSyncer(pool, cfg.VAT, logger, vatCache)
+	vatScheduler := vat.NewScheduler(vatSyncer, logger)
+
 	// Initialize services
 	productSvc := product.NewService(pool, logger)
 	categorySvc := category.NewService(pool, logger)
@@ -60,6 +66,7 @@ func main() {
 	productHandler := adminhandlers.NewProductHandler(productSvc, categorySvc, logger)
 	categoryHandler := adminhandlers.NewCategoryHandler(categorySvc, logger)
 	rawMaterialHandler := adminhandlers.NewRawMaterialHandler(rawMaterialSvc, logger)
+	settingsHandler := adminhandlers.NewSettingsHandler(pool, vatSyncer, logger)
 
 	// Admin server (HTMX + templ)
 	adminMux := http.NewServeMux()
@@ -82,6 +89,7 @@ func main() {
 	productHandler.RegisterRoutes(protectedMux)
 	categoryHandler.RegisterRoutes(protectedMux)
 	rawMaterialHandler.RegisterRoutes(protectedMux)
+	settingsHandler.RegisterRoutes(protectedMux)
 	adminMux.Handle("/admin/", middleware.RequireAuth(authService)(protectedMux))
 
 	// Root redirect
@@ -120,6 +128,11 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
+	// Start VAT rate sync scheduler
+	if cfg.VAT.SyncEnabled {
+		vatScheduler.Start(context.Background())
+	}
+
 	// Start servers
 	errCh := make(chan error, 2)
 
@@ -150,6 +163,9 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
+
+	// Stop VAT scheduler
+	vatScheduler.Stop()
 
 	if err := adminServer.Shutdown(ctx); err != nil {
 		slog.Error("admin server shutdown error", "error", err)

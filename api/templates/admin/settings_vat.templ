@@ -1,0 +1,290 @@
+package admin
+
+import "github.com/forgecommerce/api/templates/layouts"
+
+type VATSettingsData struct {
+	CSRFToken string
+	Error     string
+	Success   string
+
+	// VAT Configuration
+	VATEnabled          bool
+	VATNumber           string
+	VATCountryCode      string
+	VATPricesIncludeVAT bool
+	VATDefaultCategory  string
+	VATB2BReverseCharge bool
+
+	// Reference data
+	EUCountries       []VATCountryItem
+	VATCategories     []VATCategoryItem
+	ShippingCountries []VATShippingCountryItem
+
+	// VAT Rates display
+	RatesByCountry []VATCountryRates
+	LastSyncTime   string
+	LastSyncSource string
+}
+
+type VATCountryItem struct {
+	Code string
+	Name string
+}
+
+type VATCategoryItem struct {
+	Name        string
+	DisplayName string
+}
+
+type VATShippingCountryItem struct {
+	Code      string
+	Name      string
+	IsEnabled bool
+}
+
+type VATCountryRates struct {
+	CountryCode  string
+	CountryName  string
+	Standard     string
+	Reduced      string
+	ReducedAlt   string
+	SuperReduced string
+	Parking      string
+}
+
+templ VATSettingsPage(data VATSettingsData) {
+	@layouts.AdminLayout("VAT Settings", "/admin/settings") {
+		<div class="page-header">
+			<h2>VAT Settings</h2>
+		</div>
+		if data.Error != "" {
+			<div class="alert alert-error mb-2">{ data.Error }</div>
+		}
+		if data.Success != "" {
+			<div class="alert alert-success mb-2">{ data.Success }</div>
+		}
+		<!-- Section 1: VAT Configuration -->
+		<div class="card mb-3">
+			<div class="card-header">VAT Configuration</div>
+			<form method="POST" action="/admin/settings/vat">
+				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+				<div class="card-body">
+					<div class="form-grid">
+						<div class="form-group" style="grid-column: 1 / -1;">
+							<label>
+								<input
+									type="checkbox"
+									name="vat_enabled"
+									value="true"
+									if data.VATEnabled {
+										checked
+									}
+								/>
+								VAT Enabled
+							</label>
+							<p class="text-muted" style="margin-top: 4px; font-size: 0.875rem;">
+								Disable if you are not a VAT-registered business.
+							</p>
+						</div>
+						<div class="form-group">
+							<label for="vat_number">Store VAT Number</label>
+							<input type="text" id="vat_number" name="vat_number" value={ data.VATNumber } placeholder="e.g. ES12345678A"/>
+						</div>
+						<div class="form-group">
+							<label for="vat_country_code">Store Country</label>
+							<select id="vat_country_code" name="vat_country_code">
+								<option value="">Select country...</option>
+								for _, c := range data.EUCountries {
+									<option value={ c.Code } selected?={ data.VATCountryCode == c.Code }>{ c.Name } ({ c.Code })</option>
+								}
+							</select>
+						</div>
+						<div class="form-group" style="grid-column: 1 / -1;">
+							<label>Prices Include VAT</label>
+							<div style="display: flex; gap: 24px; margin-top: 4px;">
+								<label>
+									<input
+										type="radio"
+										name="vat_prices_include_vat"
+										value="true"
+										if data.VATPricesIncludeVAT {
+											checked
+										}
+									/>
+									Yes, entered prices include VAT
+								</label>
+								<label>
+									<input
+										type="radio"
+										name="vat_prices_include_vat"
+										value="false"
+										if !data.VATPricesIncludeVAT {
+											checked
+										}
+									/>
+									No, entered prices are net
+								</label>
+							</div>
+						</div>
+						<div class="form-group">
+							<label for="vat_default_category">Default VAT Category</label>
+							<select id="vat_default_category" name="vat_default_category">
+								for _, cat := range data.VATCategories {
+									<option value={ cat.Name } selected?={ data.VATDefaultCategory == cat.Name }>{ cat.DisplayName }</option>
+								}
+							</select>
+							<p class="text-muted" style="margin-top: 4px; font-size: 0.875rem;">
+								Applied to all products unless overridden.
+							</p>
+						</div>
+						<div class="form-group" style="grid-column: 1 / -1;">
+							<label>
+								<input
+									type="checkbox"
+									name="vat_b2b_reverse_charge"
+									value="true"
+									if data.VATB2BReverseCharge {
+										checked
+									}
+								/>
+								Enable B2B Reverse Charge for valid EU VAT numbers
+							</label>
+						</div>
+					</div>
+				</div>
+				<div class="card-body" style="border-top: 1px solid var(--gray-200); display: flex; justify-content: flex-end; gap: 8px;">
+					<button type="submit" class="btn btn-primary">Save VAT Settings</button>
+				</div>
+			</form>
+		</div>
+		<!-- Section 2: Selling Countries -->
+		<div class="card mb-3">
+			<div class="card-header">Selling Countries</div>
+			<form method="POST" action="/admin/settings/countries" x-data="{ selectAll(checked) { document.querySelectorAll('input[name=countries]').forEach(el => el.checked = checked) } }">
+				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+				<div class="card-body">
+					<p class="text-muted" style="margin-bottom: 16px;">
+						Select which EU countries you sell and ship to. Only enabled countries appear in the storefront checkout.
+					</p>
+					<div style="display: flex; gap: 8px; margin-bottom: 16px;">
+						<button type="button" class="btn btn-sm" @click="selectAll(true)">Select All</button>
+						<button type="button" class="btn btn-sm" @click="selectAll(false)">Deselect All</button>
+					</div>
+					<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+						for _, sc := range data.ShippingCountries {
+							<label style="display: flex; align-items: center; gap: 6px;">
+								<input
+									type="checkbox"
+									name="countries"
+									value={ sc.Code }
+									if sc.IsEnabled {
+										checked
+									}
+								/>
+								{ sc.Name } ({ sc.Code })
+							</label>
+						}
+					</div>
+				</div>
+				<div class="card-body" style="border-top: 1px solid var(--gray-200); display: flex; justify-content: flex-end; gap: 8px;">
+					<button type="submit" class="btn btn-primary">Save Countries</button>
+				</div>
+			</form>
+		</div>
+		<!-- Section 3: Current VAT Rates -->
+		<div class="card">
+			<div class="card-header flex justify-between items-center">
+				<span>Current VAT Rates</span>
+				<button
+					class="btn btn-sm btn-primary"
+					hx-post="/admin/settings/vat/sync"
+					hx-target="#sync-result"
+					hx-swap="innerHTML"
+				>
+					Sync Now
+				</button>
+			</div>
+			<div class="card-body">
+				<div style="display: flex; gap: 16px; margin-bottom: 16px;">
+					if data.LastSyncTime != "" {
+						<span class="text-muted">
+							Last synced: { data.LastSyncTime }
+						</span>
+					}
+					if data.LastSyncSource != "" {
+						<span class="text-muted">
+							(source: { data.LastSyncSource })
+						</span>
+					}
+				</div>
+				<div id="sync-result"></div>
+				<div class="table-container">
+					<table>
+						<thead>
+							<tr>
+								<th>Country</th>
+								<th>Standard</th>
+								<th>Reduced</th>
+								<th>Reduced Alt</th>
+								<th>Super Reduced</th>
+								<th>Parking</th>
+							</tr>
+						</thead>
+						<tbody>
+							if len(data.RatesByCountry) == 0 {
+								<tr>
+									<td colspan="6" class="text-center text-muted" style="padding: 40px;">
+										No VAT rates available. Click "Sync Now" to fetch current rates.
+									</td>
+								</tr>
+							}
+							for _, r := range data.RatesByCountry {
+								<tr>
+									<td>{ r.CountryName } ({ r.CountryCode })</td>
+									<td>
+										if r.Standard != "" {
+											{ r.Standard }
+										} else {
+											<span class="text-muted">&mdash;</span>
+										}
+									</td>
+									<td>
+										if r.Reduced != "" {
+											{ r.Reduced }
+										} else {
+											<span class="text-muted">&mdash;</span>
+										}
+									</td>
+									<td>
+										if r.ReducedAlt != "" {
+											{ r.ReducedAlt }
+										} else {
+											<span class="text-muted">&mdash;</span>
+										}
+									</td>
+									<td>
+										if r.SuperReduced != "" {
+											{ r.SuperReduced }
+										} else {
+											<span class="text-muted">&mdash;</span>
+										}
+									</td>
+									<td>
+										if r.Parking != "" {
+											{ r.Parking }
+										} else {
+											<span class="text-muted">&mdash;</span>
+										}
+									</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</div>
+				<p class="text-muted" style="margin-top: 12px; font-size: 0.875rem;">
+					Showing rates for enabled selling countries only. Rates are synced automatically every midnight (UTC). Manual edits are overwritten on next sync unless rate source is set to "manual".
+				</p>
+			</div>
+		</div>
+	}
+}
