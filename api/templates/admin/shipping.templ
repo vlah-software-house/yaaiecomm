@@ -1,0 +1,227 @@
+package admin
+
+import (
+	"fmt"
+	"github.com/forgecommerce/api/templates/layouts"
+)
+
+type ShippingSettingsData struct {
+	Config    ShippingConfigItem
+	Zones     []ShippingZoneItem
+	CSRFToken string
+	Error     string
+	Success   string
+}
+
+type ShippingConfigItem struct {
+	Enabled               bool
+	CalculationMethod     string // "fixed", "weight_based", "size_based"
+	FixedFee              string // formatted decimal
+	FreeShippingThreshold string // formatted decimal
+	DefaultCurrency       string
+}
+
+type ShippingZoneItem struct {
+	ID                string
+	Name              string
+	Countries         string // comma-separated list
+	CalculationMethod string
+	Position          int
+}
+
+templ ShippingSettingsPage(data ShippingSettingsData) {
+	@layouts.AdminLayout("Shipping Settings", "/admin/settings") {
+		<div class="page-header">
+			<h2>Shipping Settings</h2>
+		</div>
+		if data.Error != "" {
+			<div class="alert alert-error mb-2">{ data.Error }</div>
+		}
+		if data.Success != "" {
+			<div class="alert alert-success mb-2">{ data.Success }</div>
+		}
+		<!-- Section 1: Global Shipping Configuration -->
+		<div class="card mb-3">
+			<div class="card-header">Global Shipping Configuration</div>
+			<form method="POST" action="/admin/settings/shipping">
+				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+				<div class="card-body">
+					<div class="form-grid">
+						<div class="form-group" style="grid-column: 1 / -1;">
+							<label>
+								<input
+									type="checkbox"
+									name="enabled"
+									value="true"
+									if data.Config.Enabled {
+										checked
+									}
+								/>
+								Shipping Enabled
+							</label>
+							<p class="text-muted" style="margin-top: 4px; font-size: 0.875rem;">
+								Enable to charge shipping fees on orders. When disabled, all orders ship free.
+							</p>
+						</div>
+						<div class="form-group">
+							<label for="calculation_method">Calculation Method</label>
+							<select id="calculation_method" name="calculation_method">
+								<option value="fixed" selected?={ data.Config.CalculationMethod == "fixed" }>Fixed</option>
+								<option value="weight_based" selected?={ data.Config.CalculationMethod == "weight_based" }>Weight Based</option>
+								<option value="size_based" selected?={ data.Config.CalculationMethod == "size_based" }>Size Based</option>
+							</select>
+						</div>
+						<div class="form-group">
+							<label for="fixed_fee">Fixed Fee</label>
+							<input
+								type="number"
+								id="fixed_fee"
+								name="fixed_fee"
+								value={ data.Config.FixedFee }
+								step="0.01"
+								min="0"
+								placeholder="0.00"
+							/>
+						</div>
+						<div class="form-group">
+							<label for="free_shipping_threshold">Free Shipping Threshold</label>
+							<input
+								type="number"
+								id="free_shipping_threshold"
+								name="free_shipping_threshold"
+								value={ data.Config.FreeShippingThreshold }
+								step="0.01"
+								min="0"
+								placeholder="0.00"
+							/>
+							<p class="text-muted" style="margin-top: 4px; font-size: 0.875rem;">
+								Orders above this amount ship free. Leave empty or 0 to disable.
+							</p>
+						</div>
+						<div class="form-group">
+							<label for="default_currency">Currency</label>
+							<input
+								type="text"
+								id="default_currency"
+								value={ data.Config.DefaultCurrency }
+								disabled
+								readonly
+							/>
+							<p class="text-muted" style="margin-top: 4px; font-size: 0.875rem;">
+								Currency is determined by store settings.
+							</p>
+						</div>
+					</div>
+				</div>
+				<div class="card-body" style="border-top: 1px solid var(--gray-200); display: flex; justify-content: flex-end; gap: 8px;">
+					<button type="submit" class="btn btn-primary">Save Shipping Config</button>
+				</div>
+			</form>
+		</div>
+		<!-- Section 2: Shipping Zones -->
+		<div class="card">
+			<div class="card-header">Shipping Zones</div>
+			<div class="card-body">
+				<p class="text-muted" style="margin-bottom: 16px; font-size: 0.875rem;">
+					Group countries into shipping zones with specific rates and calculation methods.
+					Countries not assigned to a zone use the global shipping configuration above.
+				</p>
+				<div class="table-container">
+					<table>
+						<thead>
+							<tr>
+								<th>Name</th>
+								<th>Countries</th>
+								<th>Method</th>
+								<th>Position</th>
+								<th>Actions</th>
+							</tr>
+						</thead>
+						<tbody id="shipping-zones-body">
+							if len(data.Zones) == 0 {
+								<tr id="no-shipping-zones">
+									<td colspan="5" class="text-center text-muted" style="padding: 40px;">
+										No shipping zones defined. All countries use the global shipping configuration.
+									</td>
+								</tr>
+							}
+							for _, z := range data.Zones {
+								@ShippingZoneRow(z, data.CSRFToken)
+							}
+						</tbody>
+					</table>
+				</div>
+			</div>
+			<!-- Add Zone Form -->
+			<div class="card-body" style="border-top: 1px solid var(--gray-200);">
+				<form
+					hx-post="/admin/settings/shipping/zones"
+					hx-target="#shipping-zones-body"
+					hx-swap="beforeend"
+					hx-on::after-request="if(event.detail.successful) { this.reset(); var noRow = document.getElementById('no-shipping-zones'); if(noRow) noRow.remove(); }"
+				>
+					<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+					<div style="display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap;">
+						<div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 160px;">
+							<label for="zone_name">Name</label>
+							<input type="text" id="zone_name" name="name" required placeholder="e.g. Iberian Peninsula"/>
+						</div>
+						<div class="form-group" style="margin-bottom: 0; flex: 2; min-width: 200px;">
+							<label for="zone_countries">Countries</label>
+							<input type="text" id="zone_countries" name="countries" required placeholder="ES, PT, FR"/>
+							<p class="text-muted" style="margin-top: 4px; font-size: 0.875rem;">
+								Comma-separated country codes.
+							</p>
+						</div>
+						<div class="form-group" style="margin-bottom: 0; min-width: 140px;">
+							<label for="zone_method">Method</label>
+							<select id="zone_method" name="calculation_method" required>
+								<option value="fixed">Fixed</option>
+								<option value="weight_based">Weight Based</option>
+								<option value="size_based">Size Based</option>
+							</select>
+						</div>
+						<div class="form-group" style="margin-bottom: 0; min-width: 80px;">
+							<label for="zone_position">Position</label>
+							<input type="number" id="zone_position" name="position" min="0" value="0"/>
+						</div>
+						<div style="margin-bottom: 0;">
+							<button type="submit" class="btn btn-primary btn-sm">Add Zone</button>
+						</div>
+					</div>
+				</form>
+			</div>
+		</div>
+	}
+}
+
+templ ShippingZoneRow(zone ShippingZoneItem, csrfToken string) {
+	<tr>
+		<td>{ zone.Name }</td>
+		<td class="text-muted">{ zone.Countries }</td>
+		<td>
+			if zone.CalculationMethod == "fixed" {
+				Fixed
+			} else if zone.CalculationMethod == "weight_based" {
+				Weight Based
+			} else if zone.CalculationMethod == "size_based" {
+				Size Based
+			} else {
+				{ zone.CalculationMethod }
+			}
+		</td>
+		<td>{ fmt.Sprintf("%d", zone.Position) }</td>
+		<td>
+			<button
+				class="btn btn-sm btn-danger"
+				hx-post={ "/admin/settings/shipping/zones/" + zone.ID + "/delete" }
+				hx-target="closest tr"
+				hx-swap="outerHTML"
+				hx-vals={ "{\"csrf_token\":\"" + csrfToken + "\"}" }
+				hx-confirm={ fmt.Sprintf("Delete shipping zone \"%s\"?", zone.Name) }
+			>
+				Delete
+			</button>
+		</td>
+	</tr>
+}

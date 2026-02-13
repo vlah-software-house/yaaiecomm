@@ -1,0 +1,454 @@
+package admin
+
+import (
+	"fmt"
+	"github.com/forgecommerce/api/templates/layouts"
+)
+
+type DiscountListData struct {
+	Discounts   []DiscountListItem
+	CurrentPage int
+	TotalPages  int
+	CSRFToken   string
+}
+
+type DiscountListItem struct {
+	ID          string
+	Name        string
+	Type        string // "percentage" or "fixed_amount"
+	Value       string // formatted decimal
+	Scope       string // "subtotal", "shipping", "total"
+	IsActive    bool
+	Priority    int
+	Stackable   bool
+	StartsAt    string
+	EndsAt      string
+	CouponCount int
+}
+
+type DiscountFormData struct {
+	Discount DiscountFormItem
+	IsEdit   bool
+	CSRFToken string
+	Error     string
+	Success   string
+}
+
+type DiscountFormItem struct {
+	ID              string
+	Name            string
+	Type            string
+	Value           string
+	Scope           string
+	MinimumAmount   string
+	MaximumDiscount string
+	StartsAt        string
+	EndsAt          string
+	IsActive        bool
+	Priority        string
+	Stackable       bool
+}
+
+type CouponListData struct {
+	Coupons     []CouponListItem
+	Discounts   []DiscountRefItem // for dropdown in create form
+	CurrentPage int
+	TotalPages  int
+	CSRFToken   string
+}
+
+type CouponListItem struct {
+	ID                    string
+	Code                  string
+	DiscountName          string
+	UsageCount            int
+	UsageLimit            string // formatted, "Unlimited" if nil
+	UsageLimitPerCustomer string
+	IsActive              bool
+	StartsAt              string
+	EndsAt                string
+}
+
+type DiscountRefItem struct {
+	ID   string
+	Name string
+}
+
+func discountTypeBadge(t string) string {
+	switch t {
+	case "percentage":
+		return "badge-info"
+	case "fixed_amount":
+		return "badge-success"
+	default:
+		return "badge-muted"
+	}
+}
+
+func discountTypeLabel(t string) string {
+	switch t {
+	case "percentage":
+		return "Percentage"
+	case "fixed_amount":
+		return "Fixed Amount"
+	default:
+		return t
+	}
+}
+
+func discountScopeLabel(s string) string {
+	switch s {
+	case "subtotal":
+		return "Subtotal"
+	case "shipping":
+		return "Shipping"
+	case "total":
+		return "Total"
+	default:
+		return s
+	}
+}
+
+templ DiscountListPage(data DiscountListData) {
+	@layouts.AdminLayout("Discounts", "/admin/discounts") {
+		<div class="page-header flex justify-between items-center">
+			<h2>Discounts</h2>
+			<a href="/admin/discounts/new" class="btn btn-primary">+ New Discount</a>
+		</div>
+		<div class="card">
+			<div class="table-container">
+				<table>
+					<thead>
+						<tr>
+							<th>Name</th>
+							<th>Type</th>
+							<th>Value</th>
+							<th>Scope</th>
+							<th>Active</th>
+							<th>Priority</th>
+							<th>Stackable</th>
+							<th>Starts</th>
+							<th>Ends</th>
+							<th>Coupons</th>
+							<th>Actions</th>
+						</tr>
+					</thead>
+					<tbody>
+						if len(data.Discounts) == 0 {
+							<tr>
+								<td colspan="11" class="text-center text-muted" style="padding: 40px;">
+									No discounts found. <a href="/admin/discounts/new">Create your first discount.</a>
+								</td>
+							</tr>
+						}
+						for _, d := range data.Discounts {
+							<tr>
+								<td><a href={ templ.SafeURL("/admin/discounts/" + d.ID) }>{ d.Name }</a></td>
+								<td>
+									<span class={ "badge", discountTypeBadge(d.Type) }>{ discountTypeLabel(d.Type) }</span>
+								</td>
+								<td>
+									if d.Type == "percentage" {
+										{ d.Value }%
+									} else {
+										&euro;{ d.Value }
+									}
+								</td>
+								<td>{ discountScopeLabel(d.Scope) }</td>
+								<td>
+									if d.IsActive {
+										<span class="badge badge-success">Active</span>
+									} else {
+										<span class="badge badge-muted">Inactive</span>
+									}
+								</td>
+								<td>{ fmt.Sprintf("%d", d.Priority) }</td>
+								<td>
+									if d.Stackable {
+										<span class="badge badge-info">Yes</span>
+									} else {
+										<span class="badge badge-muted">No</span>
+									}
+								</td>
+								<td>
+									if d.StartsAt != "" {
+										{ d.StartsAt }
+									} else {
+										<span class="text-muted">&mdash;</span>
+									}
+								</td>
+								<td>
+									if d.EndsAt != "" {
+										{ d.EndsAt }
+									} else {
+										<span class="text-muted">&mdash;</span>
+									}
+								</td>
+								<td>{ fmt.Sprintf("%d", d.CouponCount) }</td>
+								<td>
+									<a href={ templ.SafeURL("/admin/discounts/" + d.ID) } class="btn btn-sm">Edit</a>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+			if data.TotalPages > 1 {
+				<div class="card-body flex justify-between items-center">
+					<span class="text-muted">
+						Page { fmt.Sprintf("%d", data.CurrentPage) } of { fmt.Sprintf("%d", data.TotalPages) }
+					</span>
+					<div class="flex gap-2">
+						if data.CurrentPage > 1 {
+							<a href={ templ.SafeURL(fmt.Sprintf("/admin/discounts?page=%d", data.CurrentPage-1)) } class="btn btn-sm">&larr; Prev</a>
+						}
+						if data.CurrentPage < data.TotalPages {
+							<a href={ templ.SafeURL(fmt.Sprintf("/admin/discounts?page=%d", data.CurrentPage+1)) } class="btn btn-sm">Next &rarr;</a>
+						}
+					</div>
+				</div>
+			}
+		</div>
+	}
+}
+
+templ DiscountFormPage(data DiscountFormData) {
+	@layouts.AdminLayout("Discount", "/admin/discounts") {
+		<div class="page-header">
+			if data.IsEdit {
+				<h2>Edit: { data.Discount.Name }</h2>
+			} else {
+				<h2>New Discount</h2>
+			}
+		</div>
+		if data.Error != "" {
+			<div class="alert alert-error mb-2">{ data.Error }</div>
+		}
+		if data.Success != "" {
+			<div class="alert alert-success mb-2">{ data.Success }</div>
+		}
+		<div class="card">
+			<form
+				method="POST"
+				if data.IsEdit {
+					action={ templ.SafeURL("/admin/discounts/" + data.Discount.ID) }
+				} else {
+					action="/admin/discounts"
+				}
+			>
+				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+				<div class="card-body">
+					<div class="form-grid">
+						<div class="form-group">
+							<label for="name">Name</label>
+							<input type="text" id="name" name="name" value={ data.Discount.Name } required placeholder="e.g. Summer Sale 10%"/>
+						</div>
+						<div class="form-group">
+							<label for="type">Type</label>
+							<select id="type" name="type" required>
+								<option value="percentage" selected?={ data.Discount.Type == "percentage" }>Percentage</option>
+								<option value="fixed_amount" selected?={ data.Discount.Type == "fixed_amount" }>Fixed Amount</option>
+							</select>
+						</div>
+						<div class="form-group">
+							<label for="value">Value</label>
+							<input type="number" id="value" name="value" step="0.01" min="0" value={ data.Discount.Value } required placeholder="e.g. 10.00"/>
+						</div>
+						<div class="form-group">
+							<label for="scope">Scope</label>
+							<select id="scope" name="scope" required>
+								<option value="subtotal" selected?={ data.Discount.Scope == "subtotal" }>Subtotal</option>
+								<option value="shipping" selected?={ data.Discount.Scope == "shipping" }>Shipping</option>
+								<option value="total" selected?={ data.Discount.Scope == "total" }>Total</option>
+							</select>
+						</div>
+						<div class="form-group">
+							<label for="minimum_amount">Minimum Amount (EUR)</label>
+							<input type="number" id="minimum_amount" name="minimum_amount" step="0.01" min="0" value={ data.Discount.MinimumAmount } placeholder="0.00"/>
+						</div>
+						<div class="form-group">
+							<label for="maximum_discount">Maximum Discount (EUR)</label>
+							<input type="number" id="maximum_discount" name="maximum_discount" step="0.01" min="0" value={ data.Discount.MaximumDiscount } placeholder="No limit"/>
+						</div>
+						<div class="form-group">
+							<label for="priority">Priority</label>
+							<input type="number" id="priority" name="priority" min="0" value={ data.Discount.Priority } placeholder="0"/>
+						</div>
+						<div class="form-group" style="display: flex; flex-direction: column; justify-content: flex-end;">
+							<label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+								<input type="checkbox" name="stackable" value="true" checked?={ data.Discount.Stackable }/>
+								Stackable
+							</label>
+						</div>
+						<div class="form-group" style="display: flex; flex-direction: column; justify-content: flex-end;">
+							<label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+								<input type="checkbox" name="is_active" value="true" checked?={ data.Discount.IsActive }/>
+								Active
+							</label>
+						</div>
+						<div class="form-group">
+							<label for="starts_at">Starts At</label>
+							<input type="datetime-local" id="starts_at" name="starts_at" value={ data.Discount.StartsAt }/>
+						</div>
+						<div class="form-group">
+							<label for="ends_at">Ends At</label>
+							<input type="datetime-local" id="ends_at" name="ends_at" value={ data.Discount.EndsAt }/>
+						</div>
+					</div>
+				</div>
+				<div class="card-body" style="border-top: 1px solid var(--gray-200); display: flex; justify-content: flex-end; gap: 8px;">
+					<a href="/admin/discounts" class="btn">Cancel</a>
+					if data.IsEdit {
+						<button type="submit" class="btn btn-primary">Update Discount</button>
+					} else {
+						<button type="submit" class="btn btn-primary">Create Discount</button>
+					}
+				</div>
+			</form>
+		</div>
+	}
+}
+
+templ CouponListPage(data CouponListData) {
+	@layouts.AdminLayout("Coupons", "/admin/coupons") {
+		<div class="page-header flex justify-between items-center">
+			<h2>Coupons</h2>
+		</div>
+		<!-- Inline Create Form -->
+		<div class="card mb-3">
+			<div class="card-header">Add Coupon</div>
+			<div class="card-body">
+				<form
+					hx-post="/admin/coupons"
+					hx-target="#coupons-table-body"
+					hx-swap="beforeend"
+					hx-on::after-request="if(event.detail.successful) { this.reset(); var noRow = document.getElementById('no-coupons-msg'); if(noRow) noRow.remove(); }"
+				>
+					<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+					<div style="display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap;">
+						<div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 160px;">
+							<label for="coupon_code">Code</label>
+							<input type="text" id="coupon_code" name="code" placeholder="e.g. SUMMER2026" required style="text-transform: uppercase;"/>
+						</div>
+						<div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 180px;">
+							<label for="coupon_discount_id">Discount</label>
+							<select id="coupon_discount_id" name="discount_id" required>
+								<option value="">Select discount...</option>
+								for _, d := range data.Discounts {
+									<option value={ d.ID }>{ d.Name }</option>
+								}
+							</select>
+						</div>
+						<div class="form-group" style="margin-bottom: 0; min-width: 120px;">
+							<label for="coupon_usage_limit">Usage Limit</label>
+							<input type="number" id="coupon_usage_limit" name="usage_limit" min="0" placeholder="Unlimited"/>
+						</div>
+						<div class="form-group" style="margin-bottom: 0; min-width: 140px;">
+							<label for="coupon_usage_limit_per_customer">Per Customer</label>
+							<input type="number" id="coupon_usage_limit_per_customer" name="usage_limit_per_customer" min="0" placeholder="Unlimited"/>
+						</div>
+						<div class="form-group" style="margin-bottom: 0;">
+							<label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+								<input type="checkbox" name="is_active" value="true" checked/>
+								Active
+							</label>
+						</div>
+						<div style="margin-bottom: 0;">
+							<button type="submit" class="btn btn-primary btn-sm">Add Coupon</button>
+						</div>
+					</div>
+				</form>
+			</div>
+		</div>
+		<!-- Coupons Table -->
+		<div class="card">
+			<div class="table-container">
+				<table>
+					<thead>
+						<tr>
+							<th>Code</th>
+							<th>Discount</th>
+							<th>Usage</th>
+							<th>Per Customer</th>
+							<th>Active</th>
+							<th>Starts</th>
+							<th>Ends</th>
+							<th>Actions</th>
+						</tr>
+					</thead>
+					<tbody id="coupons-table-body">
+						if len(data.Coupons) == 0 {
+							<tr id="no-coupons-msg">
+								<td colspan="8" class="text-center text-muted" style="padding: 40px;">
+									No coupons found. Add one using the form above.
+								</td>
+							</tr>
+						}
+						for _, c := range data.Coupons {
+							@CouponRow(c, data.CSRFToken)
+						}
+					</tbody>
+				</table>
+			</div>
+			if data.TotalPages > 1 {
+				<div class="card-body flex justify-between items-center">
+					<span class="text-muted">
+						Page { fmt.Sprintf("%d", data.CurrentPage) } of { fmt.Sprintf("%d", data.TotalPages) }
+					</span>
+					<div class="flex gap-2">
+						if data.CurrentPage > 1 {
+							<a href={ templ.SafeURL(fmt.Sprintf("/admin/coupons?page=%d", data.CurrentPage-1)) } class="btn btn-sm">&larr; Prev</a>
+						}
+						if data.CurrentPage < data.TotalPages {
+							<a href={ templ.SafeURL(fmt.Sprintf("/admin/coupons?page=%d", data.CurrentPage+1)) } class="btn btn-sm">Next &rarr;</a>
+						}
+					</div>
+				</div>
+			}
+		</div>
+	}
+}
+
+templ CouponRow(c CouponListItem, csrfToken string) {
+	<tr>
+		<td><strong>{ c.Code }</strong></td>
+		<td>{ c.DiscountName }</td>
+		<td>
+			{ fmt.Sprintf("%d", c.UsageCount) } / { c.UsageLimit }
+		</td>
+		<td>{ c.UsageLimitPerCustomer }</td>
+		<td>
+			if c.IsActive {
+				<span class="badge badge-success">Active</span>
+			} else {
+				<span class="badge badge-muted">Inactive</span>
+			}
+		</td>
+		<td>
+			if c.StartsAt != "" {
+				{ c.StartsAt }
+			} else {
+				<span class="text-muted">&mdash;</span>
+			}
+		</td>
+		<td>
+			if c.EndsAt != "" {
+				{ c.EndsAt }
+			} else {
+				<span class="text-muted">&mdash;</span>
+			}
+		</td>
+		<td>
+			<button
+				class="btn btn-sm btn-danger"
+				hx-post={ "/admin/coupons/" + c.ID + "/delete" }
+				hx-target="closest tr"
+				hx-swap="outerHTML"
+				hx-vals={ "{\"csrf_token\":\"" + csrfToken + "\"}" }
+				hx-confirm={ fmt.Sprintf("Delete coupon \"%s\"? This cannot be undone.", c.Code) }
+			>
+				Remove
+			</button>
+		</td>
+	</tr>
+}

@@ -1,0 +1,607 @@
+package admin
+
+import (
+	"fmt"
+	"github.com/forgecommerce/api/templates/layouts"
+)
+
+type OrderListData struct {
+	Orders       []OrderListItem
+	StatusFilter string
+	CurrentPage  int
+	TotalPages   int
+	TotalOrders  int
+	CSRFToken    string
+}
+
+type OrderListItem struct {
+	ID            string
+	OrderNumber   string
+	CustomerEmail string
+	Status        string
+	PaymentStatus string
+	Total         string
+	VatTotal      string
+	ItemCount     int
+	CreatedAt     string
+}
+
+type OrderDetailData struct {
+	Order     OrderDetailItem
+	Items     []OrderDetailItemRow
+	Events    []OrderEventItem
+	CSRFToken string
+}
+
+type OrderDetailItem struct {
+	ID                string
+	OrderNumber       string
+	Status            string
+	PaymentStatus     string
+	Email             string
+	Subtotal          string
+	ShippingFee       string
+	ShippingExtraFees string
+	DiscountAmount    string
+	VatTotal          string
+	Total             string
+	VatNumber         string
+	VatCompanyName    string
+	VatReverseCharge  bool
+	VatCountryCode    string
+	ShippingMethod    string
+	TrackingNumber    string
+	ShippedAt         string
+	DeliveredAt       string
+	Notes             string
+	CustomerNotes     string
+	CreatedAt         string
+	BillingAddress    string
+	ShippingAddress   string
+}
+
+type OrderDetailItemRow struct {
+	ProductName    string
+	VariantName    string
+	SKU            string
+	Quantity       int
+	UnitPrice      string
+	TotalPrice     string
+	VatRate        string
+	VatRateType    string
+	VatAmount      string
+	NetUnitPrice   string
+	GrossUnitPrice string
+}
+
+type OrderEventItem struct {
+	EventType  string
+	FromStatus string
+	ToStatus   string
+	CreatedAt  string
+	CreatedBy  string
+}
+
+func orderStatusBadgeClass(status string) string {
+	switch status {
+	case "pending":
+		return "badge-warning"
+	case "confirmed":
+		return "badge-primary"
+	case "processing":
+		return "badge-primary"
+	case "shipped":
+		return "badge-info"
+	case "delivered":
+		return "badge-success"
+	case "cancelled":
+		return "badge-danger"
+	default:
+		return "badge-muted"
+	}
+}
+
+func paymentStatusBadgeClass(status string) string {
+	switch status {
+	case "paid":
+		return "badge-success"
+	case "pending":
+		return "badge-warning"
+	case "failed":
+		return "badge-danger"
+	case "refunded":
+		return "badge-muted"
+	case "partially_refunded":
+		return "badge-warning"
+	default:
+		return "badge-muted"
+	}
+}
+
+templ OrderListPage(data OrderListData) {
+	@layouts.AdminLayout("Orders", "/admin/orders") {
+		<div class="page-header flex justify-between items-center">
+			<h2>Orders ({ fmt.Sprintf("%d", data.TotalOrders) })</h2>
+		</div>
+		<div class="card">
+			<div class="card-header flex justify-between items-center">
+				<span>All Orders</span>
+				<div class="flex gap-2">
+					<a
+						href="/admin/orders"
+						class={ "btn btn-sm", templ.KV("btn-primary", data.StatusFilter == "") }
+					>All</a>
+					<a
+						href="/admin/orders?status=pending"
+						class={ "btn btn-sm", templ.KV("btn-primary", data.StatusFilter == "pending") }
+					>Pending</a>
+					<a
+						href="/admin/orders?status=confirmed"
+						class={ "btn btn-sm", templ.KV("btn-primary", data.StatusFilter == "confirmed") }
+					>Confirmed</a>
+					<a
+						href="/admin/orders?status=processing"
+						class={ "btn btn-sm", templ.KV("btn-primary", data.StatusFilter == "processing") }
+					>Processing</a>
+					<a
+						href="/admin/orders?status=shipped"
+						class={ "btn btn-sm", templ.KV("btn-primary", data.StatusFilter == "shipped") }
+					>Shipped</a>
+					<a
+						href="/admin/orders?status=delivered"
+						class={ "btn btn-sm", templ.KV("btn-primary", data.StatusFilter == "delivered") }
+					>Delivered</a>
+					<a
+						href="/admin/orders?status=cancelled"
+						class={ "btn btn-sm", templ.KV("btn-primary", data.StatusFilter == "cancelled") }
+					>Cancelled</a>
+				</div>
+			</div>
+			<div class="table-container">
+				<table>
+					<thead>
+						<tr>
+							<th>Order #</th>
+							<th>Customer</th>
+							<th>Status</th>
+							<th>Payment</th>
+							<th>Total</th>
+							<th>VAT</th>
+							<th>Items</th>
+							<th>Date</th>
+							<th>Actions</th>
+						</tr>
+					</thead>
+					<tbody>
+						if len(data.Orders) == 0 {
+							<tr>
+								<td colspan="9" class="text-center text-muted" style="padding: 40px;">
+									No orders found.
+								</td>
+							</tr>
+						}
+						for _, o := range data.Orders {
+							<tr>
+								<td>
+									<a href={ templ.SafeURL("/admin/orders/" + o.ID) }>{ o.OrderNumber }</a>
+								</td>
+								<td>{ o.CustomerEmail }</td>
+								<td>
+									<span class={ "badge", orderStatusBadgeClass(o.Status) }>{ o.Status }</span>
+								</td>
+								<td>
+									<span class={ "badge", paymentStatusBadgeClass(o.PaymentStatus) }>{ o.PaymentStatus }</span>
+								</td>
+								<td>{ o.Total }</td>
+								<td class="text-muted">{ o.VatTotal }</td>
+								<td>{ fmt.Sprintf("%d", o.ItemCount) }</td>
+								<td class="text-muted">{ o.CreatedAt }</td>
+								<td>
+									<a href={ templ.SafeURL("/admin/orders/" + o.ID) } class="btn btn-sm">View</a>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+			if data.TotalPages > 1 {
+				<div class="card-body flex justify-between items-center">
+					<span class="text-muted">
+						Page { fmt.Sprintf("%d", data.CurrentPage) } of { fmt.Sprintf("%d", data.TotalPages) }
+					</span>
+					<div class="flex gap-2">
+						if data.CurrentPage > 1 {
+							<a href={ templ.SafeURL(fmt.Sprintf("/admin/orders?page=%d&status=%s", data.CurrentPage-1, data.StatusFilter)) } class="btn btn-sm">&larr; Prev</a>
+						}
+						if data.CurrentPage < data.TotalPages {
+							<a href={ templ.SafeURL(fmt.Sprintf("/admin/orders?page=%d&status=%s", data.CurrentPage+1, data.StatusFilter)) } class="btn btn-sm">Next &rarr;</a>
+						}
+					</div>
+				</div>
+			}
+		</div>
+	}
+}
+
+templ OrderDetailPage(data OrderDetailData) {
+	@layouts.AdminLayout("Order " + data.Order.OrderNumber, "/admin/orders") {
+		<div class="page-header flex justify-between items-center">
+			<h2>Order { data.Order.OrderNumber }</h2>
+			<a href="/admin/orders" class="btn btn-sm">&larr; Back to Orders</a>
+		</div>
+		<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px; align-items: start;">
+			<!-- Left Column -->
+			<div>
+				<!-- Order Info Card -->
+				<div class="card mb-3">
+					<div class="card-header">Order Information</div>
+					<div class="card-body">
+						<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+							<div>
+								<p class="text-muted" style="font-size: 0.875rem; margin-bottom: 4px;">Status</p>
+								<span class={ "badge", orderStatusBadgeClass(data.Order.Status) }>{ data.Order.Status }</span>
+							</div>
+							<div>
+								<p class="text-muted" style="font-size: 0.875rem; margin-bottom: 4px;">Payment</p>
+								<span class={ "badge", paymentStatusBadgeClass(data.Order.PaymentStatus) }>{ data.Order.PaymentStatus }</span>
+							</div>
+							<div>
+								<p class="text-muted" style="font-size: 0.875rem; margin-bottom: 4px;">Customer Email</p>
+								<p>{ data.Order.Email }</p>
+							</div>
+							<div>
+								<p class="text-muted" style="font-size: 0.875rem; margin-bottom: 4px;">Order Date</p>
+								<p>{ data.Order.CreatedAt }</p>
+							</div>
+							if data.Order.ShippingMethod != "" {
+								<div>
+									<p class="text-muted" style="font-size: 0.875rem; margin-bottom: 4px;">Shipping Method</p>
+									<p>{ data.Order.ShippingMethod }</p>
+								</div>
+							}
+							if data.Order.TrackingNumber != "" {
+								<div>
+									<p class="text-muted" style="font-size: 0.875rem; margin-bottom: 4px;">Tracking Number</p>
+									<p>{ data.Order.TrackingNumber }</p>
+								</div>
+							}
+							if data.Order.ShippedAt != "" {
+								<div>
+									<p class="text-muted" style="font-size: 0.875rem; margin-bottom: 4px;">Shipped At</p>
+									<p>{ data.Order.ShippedAt }</p>
+								</div>
+							}
+							if data.Order.DeliveredAt != "" {
+								<div>
+									<p class="text-muted" style="font-size: 0.875rem; margin-bottom: 4px;">Delivered At</p>
+									<p>{ data.Order.DeliveredAt }</p>
+								</div>
+							}
+						</div>
+						if data.Order.CustomerNotes != "" {
+							<div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--gray-200);">
+								<p class="text-muted" style="font-size: 0.875rem; margin-bottom: 4px;">Customer Notes</p>
+								<p>{ data.Order.CustomerNotes }</p>
+							</div>
+						}
+						if data.Order.Notes != "" {
+							<div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--gray-200);">
+								<p class="text-muted" style="font-size: 0.875rem; margin-bottom: 4px;">Internal Notes</p>
+								<p>{ data.Order.Notes }</p>
+							</div>
+						}
+					</div>
+				</div>
+				<!-- Order Items Card -->
+				<div class="card mb-3">
+					<div class="card-header">Order Items</div>
+					<div class="table-container">
+						<table>
+							<thead>
+								<tr>
+									<th>Product</th>
+									<th>SKU</th>
+									<th>Qty</th>
+									<th>Unit Price</th>
+									<th>VAT Rate</th>
+									<th>VAT Amount</th>
+									<th>Total</th>
+								</tr>
+							</thead>
+							<tbody>
+								if len(data.Items) == 0 {
+									<tr>
+										<td colspan="7" class="text-center text-muted" style="padding: 40px;">
+											No items in this order.
+										</td>
+									</tr>
+								}
+								for _, item := range data.Items {
+									<tr>
+										<td>
+											<div>{ item.ProductName }</div>
+											if item.VariantName != "" {
+												<span class="text-muted" style="font-size: 0.875rem;">{ item.VariantName }</span>
+											}
+										</td>
+										<td class="text-muted">{ item.SKU }</td>
+										<td>{ fmt.Sprintf("%d", item.Quantity) }</td>
+										<td>
+											{ item.UnitPrice }
+											if item.NetUnitPrice != "" && item.GrossUnitPrice != "" {
+												<div class="text-muted" style="font-size: 0.75rem;">
+													Net: { item.NetUnitPrice } / Gross: { item.GrossUnitPrice }
+												</div>
+											}
+										</td>
+										<td>
+											if item.VatRate != "" {
+												{ item.VatRate }
+												if item.VatRateType != "" {
+													<span class="text-muted" style="font-size: 0.75rem;"> ({ item.VatRateType })</span>
+												}
+											} else {
+												<span class="text-muted">&mdash;</span>
+											}
+										</td>
+										<td>
+											if item.VatAmount != "" {
+												{ item.VatAmount }
+											} else {
+												<span class="text-muted">&mdash;</span>
+											}
+										</td>
+										<td>{ item.TotalPrice }</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+					if data.Order.VatReverseCharge {
+						<div class="card-body" style="border-top: 1px solid var(--gray-200);">
+							<div class="alert alert-info" style="margin-bottom: 0;">
+								<strong>VAT Reverse Charge Applied</strong>
+								<p style="margin-top: 4px; font-size: 0.875rem;">
+									This order qualifies { "for" } B2B reverse charge. VAT is 0% — the buyer is liable
+									{ "for" } VAT in their country of registration.
+								</p>
+								if data.Order.VatNumber != "" {
+									<p style="margin-top: 4px; font-size: 0.875rem;">
+										Customer VAT Number: <strong>{ data.Order.VatNumber }</strong>
+										if data.Order.VatCompanyName != "" {
+											— { data.Order.VatCompanyName }
+										}
+									</p>
+								}
+							</div>
+						</div>
+					}
+				</div>
+				<!-- Event History Card -->
+				<div class="card">
+					<div class="card-header">Event History</div>
+					<div class="table-container">
+						<table>
+							<thead>
+								<tr>
+									<th>Event</th>
+									<th>From</th>
+									<th>To</th>
+									<th>By</th>
+									<th>Date</th>
+								</tr>
+							</thead>
+							<tbody>
+								if len(data.Events) == 0 {
+									<tr>
+										<td colspan="5" class="text-center text-muted" style="padding: 40px;">
+											No events recorded { "for" } this order.
+										</td>
+									</tr>
+								}
+								for _, ev := range data.Events {
+									<tr>
+										<td>{ ev.EventType }</td>
+										<td>
+											if ev.FromStatus != "" {
+												<span class={ "badge", orderStatusBadgeClass(ev.FromStatus) }>{ ev.FromStatus }</span>
+											} else {
+												<span class="text-muted">&mdash;</span>
+											}
+										</td>
+										<td>
+											if ev.ToStatus != "" {
+												<span class={ "badge", orderStatusBadgeClass(ev.ToStatus) }>{ ev.ToStatus }</span>
+											} else {
+												<span class="text-muted">&mdash;</span>
+											}
+										</td>
+										<td>
+											if ev.CreatedBy != "" {
+												{ ev.CreatedBy }
+											} else {
+												<span class="text-muted">System</span>
+											}
+										</td>
+										<td class="text-muted">{ ev.CreatedAt }</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</div>
+			<!-- Right Column -->
+			<div>
+				<!-- Addresses Card -->
+				<div class="card mb-3">
+					<div class="card-header">Addresses</div>
+					<div class="card-body">
+						<p class="text-muted" style="font-size: 0.875rem; margin-bottom: 4px;">Billing Address</p>
+						if data.Order.BillingAddress != "" {
+							<p style="white-space: pre-line; margin-bottom: 16px;">{ data.Order.BillingAddress }</p>
+						} else {
+							<p class="text-muted" style="margin-bottom: 16px;">Not provided</p>
+						}
+						<p class="text-muted" style="font-size: 0.875rem; margin-bottom: 4px;">Shipping Address</p>
+						if data.Order.ShippingAddress != "" {
+							<p style="white-space: pre-line;">{ data.Order.ShippingAddress }</p>
+						} else {
+							<p class="text-muted">Not provided</p>
+						}
+					</div>
+				</div>
+				<!-- Totals Card -->
+				<div class="card mb-3">
+					<div class="card-header">Order Totals</div>
+					<div class="card-body">
+						<div style="display: flex; flex-direction: column; gap: 8px;">
+							<div style="display: flex; justify-content: space-between;">
+								<span class="text-muted">Subtotal</span>
+								<span>{ data.Order.Subtotal }</span>
+							</div>
+							if data.Order.ShippingFee != "" {
+								<div style="display: flex; justify-content: space-between;">
+									<span class="text-muted">Shipping</span>
+									<span>{ data.Order.ShippingFee }</span>
+								</div>
+							}
+							if data.Order.ShippingExtraFees != "" {
+								<div style="display: flex; justify-content: space-between;">
+									<span class="text-muted">Shipping Extras</span>
+									<span>{ data.Order.ShippingExtraFees }</span>
+								</div>
+							}
+							if data.Order.DiscountAmount != "" {
+								<div style="display: flex; justify-content: space-between;">
+									<span class="text-muted">Discount</span>
+									<span style="color: var(--color-success);">-{ data.Order.DiscountAmount }</span>
+								</div>
+							}
+							<div style="display: flex; justify-content: space-between;">
+								<span class="text-muted">
+									VAT
+									if data.Order.VatCountryCode != "" {
+										({ data.Order.VatCountryCode })
+									}
+								</span>
+								<span>
+									if data.Order.VatReverseCharge {
+										<span class="text-muted">Reverse Charge</span>
+									} else {
+										{ data.Order.VatTotal }
+									}
+								</span>
+							</div>
+							<hr style="border: none; border-top: 1px solid var(--gray-200); margin: 4px 0;"/>
+							<div style="display: flex; justify-content: space-between; font-weight: 600; font-size: 1.1rem;">
+								<span>Total</span>
+								<span>{ data.Order.Total }</span>
+							</div>
+						</div>
+					</div>
+				</div>
+				<!-- VAT Details Card -->
+				if data.Order.VatNumber != "" || data.Order.VatReverseCharge {
+					<div class="card mb-3">
+						<div class="card-header">VAT Details</div>
+						<div class="card-body">
+							if data.Order.VatNumber != "" {
+								<div style="margin-bottom: 8px;">
+									<p class="text-muted" style="font-size: 0.875rem; margin-bottom: 4px;">Customer VAT Number</p>
+									<p>{ data.Order.VatNumber }</p>
+								</div>
+							}
+							if data.Order.VatCompanyName != "" {
+								<div style="margin-bottom: 8px;">
+									<p class="text-muted" style="font-size: 0.875rem; margin-bottom: 4px;">Company Name</p>
+									<p>{ data.Order.VatCompanyName }</p>
+								</div>
+							}
+							if data.Order.VatCountryCode != "" {
+								<div style="margin-bottom: 8px;">
+									<p class="text-muted" style="font-size: 0.875rem; margin-bottom: 4px;">VAT Country</p>
+									<p>{ data.Order.VatCountryCode }</p>
+								</div>
+							}
+							if data.Order.VatReverseCharge {
+								<div>
+									<span class="badge badge-info">Reverse Charge</span>
+								</div>
+							}
+						</div>
+					</div>
+				}
+				<!-- Actions Card -->
+				<div class="card mb-3" id="order-actions-card">
+					<div class="card-header">Actions</div>
+					<div class="card-body">
+						<!-- Update Status -->
+						<form
+							hx-post={ "/admin/orders/" + data.Order.ID + "/status" }
+							hx-target="#order-actions-card"
+							hx-swap="outerHTML"
+							style="margin-bottom: 16px;"
+						>
+							<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+							<div class="form-group" style="margin-bottom: 8px;">
+								<label for="order_status">Update Status</label>
+								<select id="order_status" name="status">
+									if data.Order.Status == "pending" {
+										<option value="confirmed">Confirmed</option>
+										<option value="cancelled">Cancelled</option>
+									}
+									if data.Order.Status == "confirmed" {
+										<option value="processing">Processing</option>
+										<option value="cancelled">Cancelled</option>
+									}
+									if data.Order.Status == "processing" {
+										<option value="shipped">Shipped</option>
+										<option value="cancelled">Cancelled</option>
+									}
+									if data.Order.Status == "shipped" {
+										<option value="delivered">Delivered</option>
+									}
+								</select>
+							</div>
+							if data.Order.Status != "delivered" && data.Order.Status != "cancelled" {
+								<button
+									type="submit"
+									class="btn btn-primary btn-sm"
+									hx-confirm="Are you sure you want to update the order status?"
+									style="width: 100%;"
+								>
+									Update Status
+								</button>
+							}
+						</form>
+						<!-- Update Tracking -->
+						if data.Order.Status == "processing" || data.Order.Status == "shipped" {
+							<form
+								hx-post={ "/admin/orders/" + data.Order.ID + "/tracking" }
+								hx-target="#order-actions-card"
+								hx-swap="outerHTML"
+								style="padding-top: 16px; border-top: 1px solid var(--gray-200);"
+							>
+								<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+								<div class="form-group" style="margin-bottom: 8px;">
+									<label for="tracking_number">Tracking Number</label>
+									<input
+										type="text"
+										id="tracking_number"
+										name="tracking_number"
+										value={ data.Order.TrackingNumber }
+										placeholder="Enter tracking number"
+									/>
+								</div>
+								<button type="submit" class="btn btn-sm" style="width: 100%;">
+									Update Tracking
+								</button>
+							</form>
+						}
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}
