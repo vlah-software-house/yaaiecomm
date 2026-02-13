@@ -1,0 +1,265 @@
+package admin
+
+import (
+	"fmt"
+	"github.com/forgecommerce/api/templates/layouts"
+)
+
+type ProductVariantsData struct {
+	ProductID     string
+	ProductName   string
+	HasAttributes bool
+	Variants      []ProductVariantItem
+	CSRFToken     string
+	Error         string
+	Success       string
+}
+
+type ProductVariantItem struct {
+	ID                string
+	SKU               string
+	Options           string // human-readable: "Black / Large"
+	Price             string // formatted decimal or empty
+	CompareAtPrice    string
+	WeightGrams       string
+	StockQuantity     int
+	LowStockThreshold int
+	Barcode           string
+	IsActive          bool
+	Position          int
+}
+
+templ ProductVariantsPage(data ProductVariantsData) {
+	@layouts.AdminLayout("Product Variants", "/admin/products") {
+		<div class="page-header">
+			<h2>Edit: { data.ProductName }</h2>
+		</div>
+		@ProductTabs(data.ProductID, "variants")
+		@ProductVariantsContent(data)
+	}
+}
+
+templ ProductVariantsContent(data ProductVariantsData) {
+	if data.Error != "" {
+		<div class="alert alert-error mb-2">{ data.Error }</div>
+	}
+	if data.Success != "" {
+		<div class="alert alert-success mb-2">{ data.Success }</div>
+	}
+	if !data.HasAttributes {
+		<div class="card mb-3">
+			<div class="card-body text-center" style="padding: 40px;">
+				<p class="text-muted" style="margin-bottom: 12px;">
+					Define attributes first on the
+					<a href={ templ.SafeURL("/admin/products/" + data.ProductID + "/attributes") }>Attributes tab</a>
+					before generating variants.
+				</p>
+			</div>
+		</div>
+	} else {
+		<!-- Generate Variants -->
+		<div class="card mb-3">
+			<div class="card-header flex justify-between items-center">
+				<span>Variant Generation</span>
+				<button
+					class="btn btn-primary btn-sm"
+					hx-post={ "/admin/products/" + data.ProductID + "/variants/generate" }
+					hx-target="#variants-table-body"
+					hx-swap="innerHTML"
+					hx-vals={ "{\"csrf_token\":\"" + data.CSRFToken + "\"}" }
+					hx-confirm="This will generate variants for all attribute combinations. Existing variants will be preserved. Continue?"
+				>
+					Generate Variants
+				</button>
+			</div>
+			<div class="card-body">
+				<p class="text-muted" style="font-size: 0.875rem;">
+					Generate variants from all combinations of product attributes. Existing variants are preserved and new combinations are added.
+				</p>
+			</div>
+		</div>
+	}
+	<!-- Variants Table -->
+	<div class="card">
+		<div class="card-header">
+			<span>Variants ({ fmt.Sprintf("%d", len(data.Variants)) })</span>
+		</div>
+		<div class="table-container">
+			<table>
+				<thead>
+					<tr>
+						<th>SKU</th>
+						<th>Options</th>
+						<th>Price</th>
+						<th>Weight</th>
+						<th>Stock</th>
+						<th>Low Stock</th>
+						<th>Barcode</th>
+						<th>Active</th>
+						<th>Actions</th>
+					</tr>
+				</thead>
+				<tbody id="variants-table-body">
+					if len(data.Variants) == 0 {
+						<tr id="no-variants-row">
+							<td colspan="9" class="text-center text-muted" style="padding: 40px;">
+								if data.HasAttributes {
+									No variants yet. Click "Generate Variants" to create variants from attribute combinations.
+								} else {
+									No variants. Define attributes first, then generate variants.
+								}
+							</td>
+						</tr>
+					}
+					for _, v := range data.Variants {
+						@ProductVariantRow(data.ProductID, v, data.CSRFToken)
+					}
+				</tbody>
+			</table>
+		</div>
+	</div>
+}
+
+templ ProductVariantRow(productID string, v ProductVariantItem, csrfToken string) {
+	<tr>
+		<td class="text-muted">{ v.SKU }</td>
+		<td>{ v.Options }</td>
+		<td>
+			if v.Price != "" {
+				{ v.Price }
+			} else {
+				<span class="text-muted">&mdash;</span>
+			}
+		</td>
+		<td>
+			if v.WeightGrams != "" {
+				{ v.WeightGrams }g
+			} else {
+				<span class="text-muted">&mdash;</span>
+			}
+		</td>
+		<td>{ fmt.Sprintf("%d", v.StockQuantity) }</td>
+		<td>{ fmt.Sprintf("%d", v.LowStockThreshold) }</td>
+		<td>
+			if v.Barcode != "" {
+				{ v.Barcode }
+			} else {
+				<span class="text-muted">&mdash;</span>
+			}
+		</td>
+		<td>
+			if v.IsActive {
+				<span class="badge badge-success">Active</span>
+			} else {
+				<span class="badge badge-muted">Inactive</span>
+			}
+		</td>
+		<td>
+			<div class="flex gap-1">
+				<a href={ templ.SafeURL("/admin/products/" + productID + "/variants/" + v.ID) } class="btn btn-sm">Edit</a>
+				<button
+					class="btn btn-sm btn-danger"
+					hx-post={ "/admin/products/" + productID + "/variants/" + v.ID + "/delete" }
+					hx-target="closest tr"
+					hx-swap="outerHTML"
+					hx-vals={ "{\"csrf_token\":\"" + csrfToken + "\"}" }
+					hx-confirm="Delete this variant? This action cannot be undone."
+				>
+					Delete
+				</button>
+			</div>
+		</td>
+	</tr>
+}
+
+type ProductVariantEditData struct {
+	ProductID         string
+	ProductName       string
+	VariantID         string
+	SKU               string
+	Options           string
+	Price             string
+	CompareAtPrice    string
+	WeightGrams       string
+	StockQuantity     string
+	LowStockThreshold string
+	Barcode           string
+	IsActive          bool
+	CSRFToken         string
+	Error             string
+}
+
+templ ProductVariantEditPage(data ProductVariantEditData) {
+	@layouts.AdminLayout("Edit Variant", "/admin/products") {
+		<div class="page-header">
+			<h2>Edit: { data.ProductName }</h2>
+		</div>
+		@ProductTabs(data.ProductID, "variants")
+		<div class="mb-2">
+			<a href={ templ.SafeURL("/admin/products/" + data.ProductID + "/variants") } class="text-muted" style="text-decoration: none;">
+				&larr; Back to Variants
+			</a>
+		</div>
+		if data.Error != "" {
+			<div class="alert alert-error mb-2">{ data.Error }</div>
+		}
+		<div class="card">
+			<div class="card-header">Variant: { data.Options }</div>
+			<form method="POST" action={ templ.SafeURL("/admin/products/" + data.ProductID + "/variants/" + data.VariantID) }>
+				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+				<div class="card-body">
+					<div class="form-grid">
+						<div class="form-group">
+							<label for="sku">SKU</label>
+							<input type="text" id="sku" name="sku" value={ data.SKU } readonly style="background: var(--gray-100); cursor: not-allowed;"/>
+						</div>
+						<div class="form-group">
+							<label for="options">Options</label>
+							<input type="text" id="options" value={ data.Options } readonly style="background: var(--gray-100); cursor: not-allowed;"/>
+						</div>
+						<div class="form-group">
+							<label for="price">Price (EUR)</label>
+							<input type="number" id="price" name="price" step="0.01" min="0" value={ data.Price } placeholder="Leave empty to use calculated price"/>
+							<p class="text-muted" style="margin-top: 4px; font-size: 0.875rem;">
+								Leave empty to use base price + attribute modifiers.
+							</p>
+						</div>
+						<div class="form-group">
+							<label for="compare_at_price">Compare At Price</label>
+							<input type="number" id="compare_at_price" name="compare_at_price" step="0.01" min="0" value={ data.CompareAtPrice }/>
+						</div>
+						<div class="form-group">
+							<label for="weight_grams">Weight (grams)</label>
+							<input type="number" id="weight_grams" name="weight_grams" min="0" value={ data.WeightGrams } placeholder="Leave empty to use calculated weight"/>
+						</div>
+						<div class="form-group">
+							<label for="stock_quantity">Stock Quantity</label>
+							<input type="number" id="stock_quantity" name="stock_quantity" min="0" value={ data.StockQuantity } required/>
+						</div>
+						<div class="form-group">
+							<label for="low_stock_threshold">Low Stock Threshold</label>
+							<input type="number" id="low_stock_threshold" name="low_stock_threshold" min="0" value={ data.LowStockThreshold }/>
+						</div>
+						<div class="form-group">
+							<label for="barcode">Barcode</label>
+							<input type="text" id="barcode" name="barcode" value={ data.Barcode } placeholder="EAN, UPC, etc."/>
+						</div>
+						<div class="form-group">
+							<label for="is_active">
+								<input type="checkbox" id="is_active" name="is_active" value="true" checked?={ data.IsActive } style="width: auto; margin-right: 6px;"/>
+								Active
+							</label>
+							<p class="text-muted" style="margin-top: 4px; font-size: 0.875rem;">
+								Inactive variants are not shown on the storefront.
+							</p>
+						</div>
+					</div>
+				</div>
+				<div class="card-body" style="border-top: 1px solid var(--gray-200); display: flex; justify-content: flex-end; gap: 8px;">
+					<a href={ templ.SafeURL("/admin/products/" + data.ProductID + "/variants") } class="btn">Cancel</a>
+					<button type="submit" class="btn btn-primary">Save Changes</button>
+				</div>
+			</form>
+		</div>
+	}
+}

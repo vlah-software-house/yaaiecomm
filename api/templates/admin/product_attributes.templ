@@ -1,0 +1,299 @@
+package admin
+
+import (
+	"fmt"
+	"github.com/forgecommerce/api/templates/layouts"
+)
+
+type ProductAttributesData struct {
+	ProductID   string
+	ProductName string
+	Attributes  []ProductAttributeItem
+	CSRFToken   string
+	Error       string
+	Success     string
+}
+
+type ProductAttributeItem struct {
+	ID              string
+	Name            string
+	DisplayName     string
+	AttributeType   string // select, color_swatch, button_group, image_swatch
+	Position        int
+	AffectsPricing  bool
+	AffectsShipping bool
+	Options         []ProductAttributeOptionItem
+}
+
+type ProductAttributeOptionItem struct {
+	ID                  string
+	Value               string
+	DisplayValue        string
+	ColorHex            string
+	PriceModifier       string // formatted decimal
+	WeightModifierGrams string
+	Position            int
+	IsActive            bool
+}
+
+func attributeTypeBadgeClass(attrType string) string {
+	switch attrType {
+	case "select":
+		return "badge-muted"
+	case "color_swatch":
+		return "badge-success"
+	case "button_group":
+		return "badge-warning"
+	case "image_swatch":
+		return "badge-info"
+	default:
+		return ""
+	}
+}
+
+func attributeTypeLabel(attrType string) string {
+	switch attrType {
+	case "select":
+		return "Select"
+	case "color_swatch":
+		return "Color Swatch"
+	case "button_group":
+		return "Button Group"
+	case "image_swatch":
+		return "Image Swatch"
+	default:
+		return attrType
+	}
+}
+
+templ ProductAttributesPage(data ProductAttributesData) {
+	@layouts.AdminLayout("Product Attributes", "/admin/products") {
+		<div class="page-header">
+			<h2>Edit: { data.ProductName }</h2>
+		</div>
+		@ProductTabs(data.ProductID, "attributes")
+		@ProductAttributesContent(data)
+	}
+}
+
+templ ProductAttributesContent(data ProductAttributesData) {
+	if data.Error != "" {
+		<div class="alert alert-error mb-2">{ data.Error }</div>
+	}
+	if data.Success != "" {
+		<div class="alert alert-success mb-2">{ data.Success }</div>
+	}
+	<!-- Add Attribute Form -->
+	<div class="card mb-3">
+		<div class="card-header">Add Attribute</div>
+		<div class="card-body">
+			<form
+				hx-post={ "/admin/products/" + data.ProductID + "/attributes" }
+				hx-target="#attributes-container"
+				hx-swap="beforeend"
+				hx-on::after-request="if(event.detail.successful) { this.reset(); var noRow = document.getElementById('no-attributes-msg'); if(noRow) noRow.remove(); }"
+			>
+				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+				<div style="display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap;">
+					<div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 140px;">
+						<label for="attr_name">Name</label>
+						<input type="text" id="attr_name" name="name" placeholder="e.g. color, size" required/>
+					</div>
+					<div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 140px;">
+						<label for="attr_display_name">Display Name</label>
+						<input type="text" id="attr_display_name" name="display_name" placeholder="e.g. Color, Size"/>
+					</div>
+					<div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 140px;">
+						<label for="attr_type">Type</label>
+						<select id="attr_type" name="attribute_type" required>
+							<option value="select">Select</option>
+							<option value="color_swatch">Color Swatch</option>
+							<option value="button_group">Button Group</option>
+							<option value="image_swatch">Image Swatch</option>
+						</select>
+					</div>
+					<div class="form-group" style="margin-bottom: 0;">
+						<label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+							<input type="checkbox" name="affects_pricing" value="true"/>
+							Affects Pricing
+						</label>
+					</div>
+					<div class="form-group" style="margin-bottom: 0;">
+						<label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+							<input type="checkbox" name="affects_shipping" value="true"/>
+							Affects Shipping
+						</label>
+					</div>
+					<div style="margin-bottom: 0;">
+						<button type="submit" class="btn btn-primary btn-sm">Add Attribute</button>
+					</div>
+				</div>
+			</form>
+		</div>
+	</div>
+	<!-- Attributes Container -->
+	<div id="attributes-container">
+		if len(data.Attributes) == 0 {
+			<div id="no-attributes-msg" class="card mb-3">
+				<div class="card-body text-center text-muted" style="padding: 40px;">
+					No attributes defined. Add an attribute above to get started.
+				</div>
+			</div>
+		}
+		for _, attr := range data.Attributes {
+			@ProductAttributeCard(data.ProductID, attr, data.CSRFToken)
+		}
+	</div>
+}
+
+templ ProductAttributeCard(productID string, attr ProductAttributeItem, csrfToken string) {
+	<div class="card mb-3 attribute-card">
+		<!-- Card Header -->
+		<div class="card-header flex justify-between items-center">
+			<div class="flex items-center gap-2">
+				<strong>{ attr.DisplayName }</strong>
+				<span class="text-muted" style="font-size: 0.875rem;">({ attr.Name })</span>
+				<span class={ "badge", attributeTypeBadgeClass(attr.AttributeType) }>{ attributeTypeLabel(attr.AttributeType) }</span>
+				if attr.AffectsPricing {
+					<span class="badge badge-warning" style="font-size: 0.75rem;">Pricing</span>
+				}
+				if attr.AffectsShipping {
+					<span class="badge badge-warning" style="font-size: 0.75rem;">Shipping</span>
+				}
+			</div>
+			<button
+				class="btn btn-sm btn-danger"
+				hx-post={ "/admin/products/" + productID + "/attributes/" + attr.ID + "/delete" }
+				hx-target="closest .attribute-card"
+				hx-swap="outerHTML"
+				hx-vals={ "{\"csrf_token\":\"" + csrfToken + "\"}" }
+				hx-confirm={ fmt.Sprintf("Delete attribute \"%s\" and all its options? This cannot be undone.", attr.DisplayName) }
+			>
+				Delete Attribute
+			</button>
+		</div>
+		<!-- Options Table -->
+		<div class="card-body">
+			<div class="table-container">
+				<table>
+					<thead>
+						<tr>
+							<th>Value</th>
+							<th>Display Value</th>
+							<th>Color</th>
+							<th>Price Mod</th>
+							<th>Weight Mod</th>
+							<th>Active</th>
+							<th>Actions</th>
+						</tr>
+					</thead>
+					<tbody id={ "options-" + attr.ID }>
+						if len(attr.Options) == 0 {
+							<tr id={ "no-options-" + attr.ID }>
+								<td colspan="7" class="text-center text-muted" style="padding: 24px;">
+									No options. Add options below to define the available choices.
+								</td>
+							</tr>
+						}
+						for _, opt := range attr.Options {
+							@ProductAttributeOptionRow(productID, attr.ID, opt, csrfToken)
+						}
+					</tbody>
+				</table>
+			</div>
+		</div>
+		<!-- Add Option Form -->
+		<div class="card-body" style="border-top: 1px solid var(--gray-200);">
+			<form
+				hx-post={ "/admin/products/" + productID + "/attributes/" + attr.ID + "/options" }
+				hx-target={ "#options-" + attr.ID }
+				hx-swap="beforeend"
+				data-attr-id={ attr.ID }
+				hx-on::after-request="if(event.detail.successful) { this.reset(); var noRow = document.getElementById('no-options-' + this.dataset.attrId); if(noRow) noRow.remove(); }"
+			>
+				<input type="hidden" name="csrf_token" value={ csrfToken }/>
+				<div style="display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap;">
+					<div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 120px;">
+						<label>Value</label>
+						<input type="text" name="value" placeholder="e.g. black" required/>
+					</div>
+					<div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 120px;">
+						<label>Display Value</label>
+						<input type="text" name="display_value" placeholder="e.g. Black"/>
+					</div>
+					<div class="form-group" style="margin-bottom: 0; min-width: 80px;">
+						<label>Color Hex</label>
+						<input type="text" name="color_hex" placeholder="#000000"/>
+					</div>
+					<div class="form-group" style="margin-bottom: 0; min-width: 100px;">
+						<label>Price Mod</label>
+						<input type="number" name="price_modifier" step="0.01" placeholder="0.00"/>
+					</div>
+					<div class="form-group" style="margin-bottom: 0; min-width: 100px;">
+						<label>Weight Mod (g)</label>
+						<input type="number" name="weight_modifier_grams" placeholder="0"/>
+					</div>
+					<div style="margin-bottom: 0;">
+						<button type="submit" class="btn btn-primary btn-sm">Add Option</button>
+					</div>
+				</div>
+			</form>
+		</div>
+	</div>
+}
+
+templ ProductAttributeOptionRow(productID string, attrID string, opt ProductAttributeOptionItem, csrfToken string) {
+	<tr>
+		<td>{ opt.Value }</td>
+		<td>
+			if opt.DisplayValue != "" {
+				{ opt.DisplayValue }
+			} else {
+				<span class="text-muted">&mdash;</span>
+			}
+		</td>
+		<td>
+			if opt.ColorHex != "" {
+				<span style="display: inline-flex; align-items: center; gap: 4px;">
+					<span style={ fmt.Sprintf("display: inline-block; width: 16px; height: 16px; border-radius: 3px; border: 1px solid var(--gray-300); background-color: %s;", opt.ColorHex) }></span>
+					<span class="text-muted" style="font-size: 0.875rem;">{ opt.ColorHex }</span>
+				</span>
+			} else {
+				<span class="text-muted">&mdash;</span>
+			}
+		</td>
+		<td>
+			if opt.PriceModifier != "" && opt.PriceModifier != "0" && opt.PriceModifier != "0.00" {
+				{ opt.PriceModifier }
+			} else {
+				<span class="text-muted">&mdash;</span>
+			}
+		</td>
+		<td>
+			if opt.WeightModifierGrams != "" && opt.WeightModifierGrams != "0" {
+				{ opt.WeightModifierGrams }g
+			} else {
+				<span class="text-muted">&mdash;</span>
+			}
+		</td>
+		<td>
+			if opt.IsActive {
+				<span class="badge badge-success">Active</span>
+			} else {
+				<span class="badge badge-muted">Inactive</span>
+			}
+		</td>
+		<td>
+			<button
+				class="btn btn-sm btn-danger"
+				hx-post={ "/admin/products/" + productID + "/attributes/" + attrID + "/options/" + opt.ID + "/delete" }
+				hx-target="closest tr"
+				hx-swap="outerHTML"
+				hx-vals={ "{\"csrf_token\":\"" + csrfToken + "\"}" }
+				hx-confirm={ fmt.Sprintf("Delete option \"%s\"?", opt.Value) }
+			>
+				Remove
+			</button>
+		</td>
+	</tr>
+}
