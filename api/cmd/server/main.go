@@ -67,6 +67,7 @@ func main() {
 	categoryHandler := adminhandlers.NewCategoryHandler(categorySvc, logger)
 	rawMaterialHandler := adminhandlers.NewRawMaterialHandler(rawMaterialSvc, logger)
 	settingsHandler := adminhandlers.NewSettingsHandler(pool, vatSyncer, logger)
+	productVATHandler := adminhandlers.NewProductVATHandler(productSvc, pool, logger)
 
 	// Admin server (HTMX + templ)
 	adminMux := http.NewServeMux()
@@ -90,6 +91,7 @@ func main() {
 	categoryHandler.RegisterRoutes(protectedMux)
 	rawMaterialHandler.RegisterRoutes(protectedMux)
 	settingsHandler.RegisterRoutes(protectedMux)
+	productVATHandler.RegisterRoutes(protectedMux)
 	adminMux.Handle("/admin/", middleware.RequireAuth(authService)(protectedMux))
 
 	// Root redirect

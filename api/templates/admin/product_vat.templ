@@ -1,0 +1,163 @@
+package admin
+
+import "github.com/forgecommerce/api/templates/layouts"
+
+type ProductVATData struct {
+	ProductID     string
+	ProductName   string
+	VATCategoryID string // Current product VAT category name (empty = store default)
+	VATCategories []VATCategoryItem
+	Overrides     []ProductVATOverrideItem
+	EUCountries   []VATCountryItem
+	CSRFToken     string
+	Error         string
+	Success       string
+}
+
+type ProductVATOverrideItem struct {
+	ID                  string
+	CountryCode         string
+	CountryName         string
+	CategoryName        string
+	CategoryDisplayName string
+	Notes               string
+}
+
+templ ProductVATPage(data ProductVATData) {
+	@layouts.AdminLayout("Product VAT", "/admin/products") {
+		<div class="page-header">
+			<h2>Edit: { data.ProductName }</h2>
+		</div>
+		@ProductTabs(data.ProductID, "vat")
+		@ProductVATSection(data)
+	}
+}
+
+templ ProductVATSection(data ProductVATData) {
+	if data.Error != "" {
+		<div class="alert alert-error mb-2">{ data.Error }</div>
+	}
+	if data.Success != "" {
+		<div class="alert alert-success mb-2">{ data.Success }</div>
+	}
+	<!-- Default VAT Category -->
+	<div class="card mb-3">
+		<div class="card-header">VAT Settings</div>
+		<form method="POST" action={ templ.SafeURL("/admin/products/" + data.ProductID + "/vat") }>
+			<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+			<div class="card-body">
+				<div class="form-group">
+					<label for="vat_category_id">VAT Category</label>
+					<select id="vat_category_id" name="vat_category_id">
+						<option value="" selected?={ data.VATCategoryID == "" }>Use Store Default</option>
+						for _, cat := range data.VATCategories {
+							<option value={ cat.Name } selected?={ data.VATCategoryID == cat.Name }>{ cat.DisplayName }</option>
+						}
+					</select>
+					<p class="text-muted" style="margin-top: 4px; font-size: 0.875rem;">
+						Override the store default VAT category for this product. Can be further overridden per country below.
+					</p>
+				</div>
+			</div>
+			<div class="card-body" style="border-top: 1px solid var(--gray-200); display: flex; justify-content: flex-end; gap: 8px;">
+				<button type="submit" class="btn btn-primary">Save VAT Category</button>
+			</div>
+		</form>
+	</div>
+	<!-- Per-Country VAT Overrides -->
+	<div class="card">
+		<div class="card-header">Country-Specific VAT Overrides</div>
+		<div class="card-body">
+			<p class="text-muted" style="margin-bottom: 16px; font-size: 0.875rem;">
+				Only needed when a product has a different VAT category in specific countries. Most products won't need overrides.
+			</p>
+			<div class="table-container">
+				<table>
+					<thead>
+						<tr>
+							<th>Country</th>
+							<th>VAT Category</th>
+							<th>Notes</th>
+							<th>Actions</th>
+						</tr>
+					</thead>
+					<tbody id="overrides-table-body">
+						if len(data.Overrides) == 0 {
+							<tr id="no-overrides-row">
+								<td colspan="4" class="text-center text-muted" style="padding: 40px;">
+									No country-specific overrides. This product uses the same VAT category in all countries.
+								</td>
+							</tr>
+						}
+						for _, o := range data.Overrides {
+							@ProductVATOverrideRow(data.ProductID, o, data.CSRFToken)
+						}
+					</tbody>
+				</table>
+			</div>
+		</div>
+		<!-- Add Override Form -->
+		<div class="card-body" style="border-top: 1px solid var(--gray-200);">
+			<form
+				hx-post={ "/admin/products/" + data.ProductID + "/vat/overrides" }
+				hx-target="#overrides-table-body"
+				hx-swap="beforeend"
+				hx-on::after-request="if(event.detail.successful) { this.reset(); var noRow = document.getElementById('no-overrides-row'); if(noRow) noRow.remove(); }"
+			>
+				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+				<div style="display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap;">
+					<div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 160px;">
+						<label for="override_country_code">Country</label>
+						<select id="override_country_code" name="country_code" required>
+							<option value="">Select country...</option>
+							for _, c := range data.EUCountries {
+								<option value={ c.Code }>{ c.Name } ({ c.Code })</option>
+							}
+						</select>
+					</div>
+					<div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 160px;">
+						<label for="override_vat_category">VAT Category</label>
+						<select id="override_vat_category" name="vat_category" required>
+							for _, cat := range data.VATCategories {
+								<option value={ cat.Name }>{ cat.DisplayName }</option>
+							}
+						</select>
+					</div>
+					<div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 160px;">
+						<label for="override_notes">Notes</label>
+						<input type="text" id="override_notes" name="notes" placeholder="e.g. Food products qualify for reduced rate"/>
+					</div>
+					<div style="margin-bottom: 0;">
+						<button type="submit" class="btn btn-primary btn-sm">Add Override</button>
+					</div>
+				</div>
+			</form>
+		</div>
+	</div>
+}
+
+templ ProductVATOverrideRow(productID string, o ProductVATOverrideItem, csrfToken string) {
+	<tr>
+		<td>{ o.CountryName } ({ o.CountryCode })</td>
+		<td>{ o.CategoryDisplayName }</td>
+		<td>
+			if o.Notes != "" {
+				{ o.Notes }
+			} else {
+				<span class="text-muted">&mdash;</span>
+			}
+		</td>
+		<td>
+			<button
+				class="btn btn-sm btn-danger"
+				hx-post={ "/admin/products/" + productID + "/vat/overrides/" + o.ID + "/delete" }
+				hx-target="closest tr"
+				hx-swap="outerHTML"
+				hx-vals={ "{\"csrf_token\":\"" + csrfToken + "\"}" }
+				hx-confirm="Remove VAT override for this country?"
+			>
+				Remove
+			</button>
+		</td>
+	</tr>
+}

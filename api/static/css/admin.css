@@ -134,6 +134,10 @@ tbody tr:hover { background: var(--gray-50); }
 .htmx-request .htmx-indicator { display: inline-block; }
 .htmx-request.htmx-indicator { display: inline-block; }
 
+/* Tabs */
+.tab-link:hover { color: var(--gray-900); }
+.tab-active { color: var(--primary) !important; border-bottom-color: var(--primary) !important; font-weight: 500; }
+
 /* Responsive */
 @media (max-width: 768px) {
   .sidebar { width: var(--sidebar-collapsed); }

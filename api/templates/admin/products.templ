@@ -135,6 +135,21 @@ type ProductFormData struct {
 	Error            string
 }
 
+templ ProductTabs(productID string, activeTab string) {
+	<div class="tab-nav" style="display: flex; gap: 0; border-bottom: 2px solid var(--gray-200); margin-bottom: 16px;">
+		<a
+			href={ templ.SafeURL("/admin/products/" + productID) }
+			class={ "tab-link", templ.KV("tab-active", activeTab == "details") }
+			style="padding: 8px 16px; text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -2px; color: var(--gray-600);"
+		>Details</a>
+		<a
+			href={ templ.SafeURL("/admin/products/" + productID + "/vat") }
+			class={ "tab-link", templ.KV("tab-active", activeTab == "vat") }
+			style="padding: 8px 16px; text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -2px; color: var(--gray-600);"
+		>VAT</a>
+	</div>
+}
+
 templ ProductFormPage(data ProductFormData) {
 	@layouts.AdminLayout("Product", "/admin/products") {
 		<div class="page-header">
@@ -144,6 +159,9 @@ templ ProductFormPage(data ProductFormData) {
 				<h2>Edit: { data.Name }</h2>
 			}
 		</div>
+		if !data.IsNew {
+			@ProductTabs(data.ID, "details")
+		}
 		if data.Error != "" {
 			<div class="alert alert-error mb-2">{ data.Error }</div>
 		}
