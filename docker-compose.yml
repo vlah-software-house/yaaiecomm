@@ -1,11 +1,10 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: forge-postgres
     environment:
-      POSTGRES_DB: forgecommerce
       POSTGRES_USER: forge
-      POSTGRES_PASSWORD: forgedev
+      POSTGRES_PASSWORD: forge
+      POSTGRES_DB: forgecommerce
     ports:
       - "5432:5432"
     volumes:
@@ -13,25 +12,60 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U forge -d forgecommerce"]
       interval: 5s
-      timeout: 3s
+      timeout: 5s
       retries: 5
+      start_period: 10s
 
-  mailpit:
-    image: axllent/mailpit:latest
-    container_name: forge-mailpit
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
-      - "1025:1025"  # SMTP
-      - "8025:8025"  # Web UI
+      - "8080:8080"
+      - "8081:8081"
     environment:
-      MP_SMTP_AUTH_ACCEPT_ANY: 1
-      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+      DATABASE_URL: postgres://forge:forge@postgres:5432/forgecommerce?sslmode=disable
+      PORT: "8080"
+      ADMIN_PORT: "8081"
+      JWT_SECRET: dev-jwt-secret-do-not-use-in-production
+      SESSION_SECRET: dev-session-secret-do-not-use-in-production
+      STRIPE_SECRET_KEY: sk_test_fake_key_for_development
+      STRIPE_WEBHOOK_SECRET: whsec_fake_webhook_secret_for_development
+      STRIPE_PUBLIC_KEY: pk_test_fake_key_for_development
+      TOTP_ISSUER: ForgeCommerce
+      BASE_URL: http://localhost:8080
+      ADMIN_URL: http://localhost:8081
+      VAT_SYNC_ENABLED: "true"
+      MEDIA_STORAGE: local
+      MEDIA_PATH: /app/media
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_FROM: store@forgecommerce.local
+
+  storefront:
+    build:
+      context: ./storefront
+      dockerfile: Dockerfile
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+    environment:
+      NUXT_PUBLIC_API_BASE: http://api:8080
 
   stripe-mock:
     image: stripe/stripe-mock:latest
-    container_name: forge-stripe-mock
     ports:
-      - "12111:12111"  # HTTP
-      - "12112:12112"  # HTTPS
+      - "12111:12111"
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "1025:1025"
+      - "8025:8025"
 
 volumes:
   pgdata:

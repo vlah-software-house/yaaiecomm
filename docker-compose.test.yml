@@ -1,31 +1,82 @@
 services:
-  postgres-test:
+  postgres:
     image: postgres:16-alpine
-    container_name: forge-postgres-test
     environment:
-      POSTGRES_DB: forgecommerce_test
       POSTGRES_USER: forge
-      POSTGRES_PASSWORD: forgetest
-    ports:
-      - "5433:5432"
-    tmpfs:
-      - /var/lib/postgresql/data
+      POSTGRES_PASSWORD: forge
+      POSTGRES_DB: forgecommerce
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forge -d forgecommerce"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  test-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: forge
+      POSTGRES_PASSWORD: forge
+      POSTGRES_DB: forgecommerce_test
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U forge -d forgecommerce_test"]
-      interval: 2s
-      timeout: 2s
-      retries: 10
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
-  mailpit-test:
-    image: axllent/mailpit:latest
-    container_name: forge-mailpit-test
-    ports:
-      - "1026:1025"
-      - "8026:8025"
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://forge:forge@postgres:5432/forgecommerce?sslmode=disable
+      PORT: "8080"
+      ADMIN_PORT: "8081"
+      JWT_SECRET: test-jwt-secret
+      SESSION_SECRET: test-session-secret
+      STRIPE_SECRET_KEY: sk_test_fake_key_for_testing
+      STRIPE_WEBHOOK_SECRET: whsec_fake_webhook_secret_for_testing
+      STRIPE_PUBLIC_KEY: pk_test_fake_key_for_testing
+      TOTP_ISSUER: ForgeCommerce
+      BASE_URL: http://api:8080
+      ADMIN_URL: http://api:8081
+      VAT_SYNC_ENABLED: "true"
+      MEDIA_STORAGE: local
+      MEDIA_PATH: /app/media
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_FROM: store@forgecommerce.test
 
-  stripe-mock-test:
+  storefront:
+    build:
+      context: ./storefront
+      dockerfile: Dockerfile
+    depends_on:
+      - api
+    environment:
+      NUXT_PUBLIC_API_BASE: http://api:8080
+
+  stripe-mock:
     image: stripe/stripe-mock:latest
-    container_name: forge-stripe-mock-test
-    ports:
-      - "12113:12111"
-      - "12114:12112"
+
+  mailpit:
+    image: axllent/mailpit:latest
+
+  playwright:
+    image: mcr.microsoft.com/playwright:v1.50.0-noble
+    depends_on:
+      - api
+      - storefront
+    working_dir: /tests
+    volumes:
+      - ./tests:/tests
+    environment:
+      BASE_URL: http://storefront:3000
+      API_URL: http://api:8080
+      ADMIN_URL: http://api:8081
+      TEST_DATABASE_URL: postgres://forge:forge@test-db:5432/forgecommerce_test?sslmode=disable
+    command: npx playwright test

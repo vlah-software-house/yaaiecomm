@@ -1,0 +1,537 @@
+package admin
+
+import (
+	"fmt"
+	"github.com/forgecommerce/api/templates/layouts"
+)
+
+// --- Sales Report Data Types ---
+
+type SalesReportPageData struct {
+	CSRFToken   string
+	DefaultFrom string // YYYY-MM-DD, defaults to 1st of current month
+	DefaultTo   string // YYYY-MM-DD, defaults to today
+}
+
+type SalesReportData struct {
+	// Period
+	From string
+	To   string
+
+	// Summary metrics
+	TotalRevenue    string // gross revenue including VAT
+	NetRevenue      string // revenue excluding VAT
+	TotalVAT        string // total VAT collected
+	OrderCount      int
+	AverageOrderVal string // AOV
+
+	// Daily breakdown
+	DailyRows []SalesDailyRow
+
+	// Top products
+	TopProducts []SalesTopProduct
+
+	// Comparison
+	PreviousPeriodRevenue string // for comparison overlay
+	RevenueChange         string // e.g., "+12.3%"
+	RevenueChangePositive bool
+}
+
+type SalesDailyRow struct {
+	Date         string
+	OrderCount   int
+	GrossRevenue string
+	NetRevenue   string
+	VATCollected string
+	Cumulative   string
+}
+
+type SalesTopProduct struct {
+	Rank         int
+	ProductName  string
+	SKU          string
+	UnitsSold    int
+	GrossRevenue string
+	NetRevenue   string
+}
+
+// --- VAT Report Data Types ---
+
+type VATReportPageData struct {
+	CSRFToken   string
+	DefaultFrom string
+	DefaultTo   string
+}
+
+type VATReportData struct {
+	From string
+	To   string
+
+	// Total VAT summary
+	TotalVATCollected string
+	TotalNetRevenue   string
+	TotalGrossRevenue string
+	OrderCount        int
+
+	// Per-country breakdown
+	CountryBreakdown []VATCountryBreakdownRow
+
+	// Per rate-type breakdown
+	RateTypeBreakdown []VATRateTypeBreakdownRow
+
+	// Reverse charge summary
+	ReverseChargeOrders int
+	ReverseChargeTotal  string
+}
+
+type VATCountryBreakdownRow struct {
+	CountryCode  string
+	CountryName  string
+	OrderCount   int
+	NetRevenue   string
+	VATCollected string
+	GrossRevenue string
+	StandardVAT  string
+	ReducedVAT   string
+	OtherVAT     string
+}
+
+type VATRateTypeBreakdownRow struct {
+	RateType     string
+	RateValue    string
+	OrderCount   int
+	NetAmount    string
+	VATAmount    string
+	GrossAmount  string
+}
+
+// --- Sales Report Page ---
+
+templ SalesReportPage(data SalesReportPageData) {
+	@layouts.AdminLayout("Sales Report", "/admin/reports/sales") {
+		<div class="page-header flex justify-between items-center">
+			<h2>Sales Report</h2>
+			<a
+				href="/admin/reports/sales/export?format=csv"
+				class="btn btn-sm"
+				id="export-csv-link"
+			>
+				Export CSV
+			</a>
+		</div>
+		<!-- Period Selector -->
+		<div class="card mb-3">
+			<div class="card-header">Report Period</div>
+			<div class="card-body">
+				<form
+					class="form-inline"
+					hx-get="/admin/reports/sales/data"
+					hx-target="#report-data"
+					hx-swap="innerHTML"
+					hx-indicator="#report-loading"
+				>
+					<div class="form-group">
+						<label for="from">From</label>
+						<input
+							type="date"
+							id="from"
+							name="from"
+							value={ data.DefaultFrom }
+						/>
+					</div>
+					<div class="form-group">
+						<label for="to">To</label>
+						<input
+							type="date"
+							id="to"
+							name="to"
+							value={ data.DefaultTo }
+						/>
+					</div>
+					<button type="submit" class="btn btn-primary">Generate</button>
+				</form>
+			</div>
+		</div>
+		<!-- Report Data (loaded via HTMX) -->
+		<div
+			id="report-data"
+			hx-get={ "/admin/reports/sales/data?from=" + data.DefaultFrom + "&to=" + data.DefaultTo }
+			hx-trigger="load"
+			hx-swap="innerHTML"
+		>
+			<div class="card">
+				<div class="card-body text-center text-muted" style="padding: 40px;">
+					Loading report data...
+				</div>
+			</div>
+		</div>
+		<!-- Loading indicator -->
+		<div id="report-loading" class="htmx-indicator" style="text-align: center; padding: 20px;">
+			<span class="text-muted">Loading...</span>
+		</div>
+	}
+}
+
+// --- Sales Report Data Fragment (returned by HTMX) ---
+
+templ SalesReportDataFragment(data SalesReportData) {
+	<!-- Summary Cards -->
+	<div class="dashboard-grid mb-3">
+		<div class="card">
+			<div class="card-header">Gross Revenue</div>
+			<div class="card-body">
+				<span class="stat-value">{ data.TotalRevenue }</span>
+				if data.PreviousPeriodRevenue != "" {
+					<div class="text-muted" style="font-size: 0.875rem; margin-top: 4px;">
+						Previous period: { data.PreviousPeriodRevenue }
+						if data.RevenueChange != "" {
+							<span
+								style={
+									templ.SafeCSS(
+										func() string {
+											if data.RevenueChangePositive {
+												return "color: var(--color-success);"
+											}
+											return "color: var(--color-danger);"
+										}(),
+									),
+								}
+							>
+								({ data.RevenueChange })
+							</span>
+						}
+					</div>
+				}
+			</div>
+		</div>
+		<div class="card">
+			<div class="card-header">Net Revenue</div>
+			<div class="card-body">
+				<span class="stat-value">{ data.NetRevenue }</span>
+			</div>
+		</div>
+		<div class="card">
+			<div class="card-header">VAT Collected</div>
+			<div class="card-body">
+				<span class="stat-value">{ data.TotalVAT }</span>
+			</div>
+		</div>
+		<div class="card">
+			<div class="card-header">Orders</div>
+			<div class="card-body">
+				<span class="stat-value">{ fmt.Sprintf("%d", data.OrderCount) }</span>
+				if data.AverageOrderVal != "" {
+					<div class="text-muted" style="font-size: 0.875rem; margin-top: 4px;">
+						AOV: { data.AverageOrderVal }
+					</div>
+				}
+			</div>
+		</div>
+	</div>
+	<!-- Daily Breakdown Table -->
+	<div class="card mb-3">
+		<div class="card-header">Daily Breakdown ({ data.From } to { data.To })</div>
+		<div class="table-container">
+			<table>
+				<thead>
+					<tr>
+						<th>Date</th>
+						<th>Orders</th>
+						<th class="text-right">Gross Revenue</th>
+						<th class="text-right">Net Revenue</th>
+						<th class="text-right">VAT Collected</th>
+						<th class="text-right">Cumulative</th>
+					</tr>
+				</thead>
+				<tbody>
+					if len(data.DailyRows) == 0 {
+						<tr>
+							<td colspan="6" class="text-center text-muted" style="padding: 40px;">
+								No sales data for the selected period.
+							</td>
+						</tr>
+					}
+					for _, row := range data.DailyRows {
+						<tr>
+							<td>{ row.Date }</td>
+							<td>{ fmt.Sprintf("%d", row.OrderCount) }</td>
+							<td class="text-right">{ row.GrossRevenue }</td>
+							<td class="text-right">{ row.NetRevenue }</td>
+							<td class="text-right">{ row.VATCollected }</td>
+							<td class="text-right text-muted">{ row.Cumulative }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	</div>
+	<!-- Top Products Table -->
+	<div class="card">
+		<div class="card-header">Top Products</div>
+		<div class="table-container">
+			<table>
+				<thead>
+					<tr>
+						<th>#</th>
+						<th>Product</th>
+						<th>SKU</th>
+						<th class="text-right">Units Sold</th>
+						<th class="text-right">Gross Revenue</th>
+						<th class="text-right">Net Revenue</th>
+					</tr>
+				</thead>
+				<tbody>
+					if len(data.TopProducts) == 0 {
+						<tr>
+							<td colspan="6" class="text-center text-muted" style="padding: 40px;">
+								No product data for the selected period.
+							</td>
+						</tr>
+					}
+					for _, p := range data.TopProducts {
+						<tr>
+							<td class="text-muted">{ fmt.Sprintf("%d", p.Rank) }</td>
+							<td>{ p.ProductName }</td>
+							<td class="text-muted">{ p.SKU }</td>
+							<td class="text-right">{ fmt.Sprintf("%d", p.UnitsSold) }</td>
+							<td class="text-right">{ p.GrossRevenue }</td>
+							<td class="text-right">{ p.NetRevenue }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	</div>
+}
+
+// --- VAT Report Page ---
+
+templ VATReportPage(data VATReportPageData) {
+	@layouts.AdminLayout("VAT Report", "/admin/reports/vat") {
+		<div class="page-header flex justify-between items-center">
+			<h2>VAT Report</h2>
+			<a
+				href="/admin/reports/vat/export?format=csv"
+				class="btn btn-sm"
+				id="vat-export-csv-link"
+			>
+				Export CSV
+			</a>
+		</div>
+		<!-- Period Selector -->
+		<div class="card mb-3">
+			<div class="card-header">Report Period</div>
+			<div class="card-body">
+				<form
+					class="form-inline"
+					hx-get="/admin/reports/vat/data"
+					hx-target="#vat-report-data"
+					hx-swap="innerHTML"
+					hx-indicator="#vat-report-loading"
+				>
+					<div class="form-group">
+						<label for="period">Period</label>
+						<select id="period" name="period">
+							<option value="monthly" selected>Monthly</option>
+							<option value="quarterly">Quarterly</option>
+							<option value="yearly">Yearly</option>
+						</select>
+					</div>
+					<div class="form-group">
+						<label for="vat_from">From</label>
+						<input
+							type="date"
+							id="vat_from"
+							name="from"
+							value={ data.DefaultFrom }
+						/>
+					</div>
+					<div class="form-group">
+						<label for="vat_to">To</label>
+						<input
+							type="date"
+							id="vat_to"
+							name="to"
+							value={ data.DefaultTo }
+						/>
+					</div>
+					<button type="submit" class="btn btn-primary">Generate</button>
+				</form>
+			</div>
+		</div>
+		<!-- Report Data (loaded via HTMX) -->
+		<div
+			id="vat-report-data"
+			hx-get={ "/admin/reports/vat/data?from=" + data.DefaultFrom + "&to=" + data.DefaultTo + "&period=monthly" }
+			hx-trigger="load"
+			hx-swap="innerHTML"
+		>
+			<div class="card">
+				<div class="card-body text-center text-muted" style="padding: 40px;">
+					Loading VAT report data...
+				</div>
+			</div>
+		</div>
+		<!-- Loading indicator -->
+		<div id="vat-report-loading" class="htmx-indicator" style="text-align: center; padding: 20px;">
+			<span class="text-muted">Loading...</span>
+		</div>
+	}
+}
+
+// --- VAT Report Data Fragment (returned by HTMX) ---
+
+templ VATReportDataFragment(data VATReportData) {
+	<!-- Summary Cards -->
+	<div class="dashboard-grid mb-3">
+		<div class="card">
+			<div class="card-header">Total VAT Collected</div>
+			<div class="card-body">
+				<span class="stat-value">{ data.TotalVATCollected }</span>
+			</div>
+		</div>
+		<div class="card">
+			<div class="card-header">Net Revenue</div>
+			<div class="card-body">
+				<span class="stat-value">{ data.TotalNetRevenue }</span>
+			</div>
+		</div>
+		<div class="card">
+			<div class="card-header">Gross Revenue</div>
+			<div class="card-body">
+				<span class="stat-value">{ data.TotalGrossRevenue }</span>
+			</div>
+		</div>
+		<div class="card">
+			<div class="card-header">Orders</div>
+			<div class="card-body">
+				<span class="stat-value">{ fmt.Sprintf("%d", data.OrderCount) }</span>
+				if data.ReverseChargeOrders > 0 {
+					<div class="text-muted" style="font-size: 0.875rem; margin-top: 4px;">
+						{ fmt.Sprintf("%d", data.ReverseChargeOrders) } reverse charge ({ data.ReverseChargeTotal })
+					</div>
+				}
+			</div>
+		</div>
+	</div>
+	<!-- VAT by Country -->
+	<div class="card mb-3">
+		<div class="card-header">VAT by Country ({ data.From } to { data.To })</div>
+		<div class="table-container">
+			<table>
+				<thead>
+					<tr>
+						<th>Country</th>
+						<th class="text-right">Orders</th>
+						<th class="text-right">Net Revenue</th>
+						<th class="text-right">Standard VAT</th>
+						<th class="text-right">Reduced VAT</th>
+						<th class="text-right">Other VAT</th>
+						<th class="text-right">Total VAT</th>
+						<th class="text-right">Gross Revenue</th>
+					</tr>
+				</thead>
+				<tbody>
+					if len(data.CountryBreakdown) == 0 {
+						<tr>
+							<td colspan="8" class="text-center text-muted" style="padding: 40px;">
+								No VAT data for the selected period.
+							</td>
+						</tr>
+					}
+					for _, row := range data.CountryBreakdown {
+						<tr>
+							<td>{ row.CountryName } ({ row.CountryCode })</td>
+							<td class="text-right">{ fmt.Sprintf("%d", row.OrderCount) }</td>
+							<td class="text-right">{ row.NetRevenue }</td>
+							<td class="text-right">
+								if row.StandardVAT != "" {
+									{ row.StandardVAT }
+								} else {
+									<span class="text-muted">&mdash;</span>
+								}
+							</td>
+							<td class="text-right">
+								if row.ReducedVAT != "" {
+									{ row.ReducedVAT }
+								} else {
+									<span class="text-muted">&mdash;</span>
+								}
+							</td>
+							<td class="text-right">
+								if row.OtherVAT != "" {
+									{ row.OtherVAT }
+								} else {
+									<span class="text-muted">&mdash;</span>
+								}
+							</td>
+							<td class="text-right">{ row.VATCollected }</td>
+							<td class="text-right">{ row.GrossRevenue }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	</div>
+	<!-- VAT by Rate Type -->
+	<div class="card mb-3">
+		<div class="card-header">VAT by Rate Type</div>
+		<div class="table-container">
+			<table>
+				<thead>
+					<tr>
+						<th>Rate Type</th>
+						<th>Rate</th>
+						<th class="text-right">Orders</th>
+						<th class="text-right">Net Amount</th>
+						<th class="text-right">VAT Amount</th>
+						<th class="text-right">Gross Amount</th>
+					</tr>
+				</thead>
+				<tbody>
+					if len(data.RateTypeBreakdown) == 0 {
+						<tr>
+							<td colspan="6" class="text-center text-muted" style="padding: 40px;">
+								No rate type data for the selected period.
+							</td>
+						</tr>
+					}
+					for _, row := range data.RateTypeBreakdown {
+						<tr>
+							<td>
+								<span class="badge badge-muted">{ row.RateType }</span>
+							</td>
+							<td>{ row.RateValue }</td>
+							<td class="text-right">{ fmt.Sprintf("%d", row.OrderCount) }</td>
+							<td class="text-right">{ row.NetAmount }</td>
+							<td class="text-right">{ row.VATAmount }</td>
+							<td class="text-right">{ row.GrossAmount }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	</div>
+	<!-- Reverse Charge Summary -->
+	if data.ReverseChargeOrders > 0 {
+		<div class="card">
+			<div class="card-header">B2B Reverse Charge Summary</div>
+			<div class="card-body">
+				<div style="display: flex; gap: 32px;">
+					<div>
+						<p class="text-muted" style="font-size: 0.875rem; margin-bottom: 4px;">Reverse Charge Orders</p>
+						<p style="font-size: 1.25rem; font-weight: 600;">{ fmt.Sprintf("%d", data.ReverseChargeOrders) }</p>
+					</div>
+					<div>
+						<p class="text-muted" style="font-size: 0.875rem; margin-bottom: 4px;">Total Value (Net)</p>
+						<p style="font-size: 1.25rem; font-weight: 600;">{ data.ReverseChargeTotal }</p>
+					</div>
+				</div>
+				<p class="text-muted" style="margin-top: 12px; font-size: 0.875rem;">
+					These orders had VAT reverse charge applied. The buyer is liable for VAT in their country of registration.
+					Ensure these are reported correctly on your EC Sales List / recapitulative statement.
+				</p>
+			</div>
+		</div>
+	}
+}

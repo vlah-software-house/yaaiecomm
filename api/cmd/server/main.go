@@ -26,6 +26,7 @@ import (
 	"github.com/forgecommerce/api/internal/services/order"
 	"github.com/forgecommerce/api/internal/services/product"
 	"github.com/forgecommerce/api/internal/services/rawmaterial"
+	"github.com/forgecommerce/api/internal/services/report"
 	"github.com/forgecommerce/api/internal/services/shipping"
 	"github.com/forgecommerce/api/internal/services/variant"
 	forgestripe "github.com/forgecommerce/api/internal/stripe"
@@ -85,6 +86,7 @@ func main() {
 	discountSvc := discount.NewService(pool, logger)
 	shippingSvc := shipping.NewService(pool, logger)
 	cartSvc := cart.NewService(pool, logger)
+	reportSvc := report.NewService(pool, logger)
 
 	// Initialize public API handlers
 	queries := db.New(pool)
@@ -114,6 +116,7 @@ func main() {
 	shippingHandler := adminhandlers.NewShippingHandler(shippingSvc, logger)
 	dashboardHandler := adminhandlers.NewDashboardHandler(pool, queries, logger)
 	userHandler := adminhandlers.NewUserHandler(authService, logger)
+	reportHandler := adminhandlers.NewReportHandler(reportSvc, logger)
 
 	// Admin server (HTMX + templ)
 	adminMux := http.NewServeMux()
@@ -146,6 +149,7 @@ func main() {
 	shippingHandler.RegisterRoutes(protectedMux)
 	dashboardHandler.RegisterRoutes(protectedMux)
 	userHandler.RegisterRoutes(protectedMux)
+	reportHandler.RegisterRoutes(protectedMux)
 	adminMux.Handle("/admin/", middleware.RequireAuth(authService)(protectedMux))
 
 	// Root redirect
