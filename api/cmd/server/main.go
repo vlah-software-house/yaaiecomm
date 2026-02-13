@@ -16,6 +16,7 @@ import (
 	adminhandlers "github.com/forgecommerce/api/internal/handlers/admin"
 	"github.com/forgecommerce/api/internal/middleware"
 	"github.com/forgecommerce/api/internal/services/attribute"
+	"github.com/forgecommerce/api/internal/services/bom"
 	"github.com/forgecommerce/api/internal/services/category"
 	"github.com/forgecommerce/api/internal/services/product"
 	"github.com/forgecommerce/api/internal/services/rawmaterial"
@@ -64,6 +65,7 @@ func main() {
 	rawMaterialSvc := rawmaterial.NewService(pool, logger)
 	attributeSvc := attribute.NewService(pool, logger)
 	variantSvc := variant.NewService(pool, logger)
+	bomSvc := bom.NewService(pool, logger)
 
 	// Initialize admin handlers
 	adminHandler := adminhandlers.NewHandler(authService, logger)
@@ -74,6 +76,7 @@ func main() {
 	productVATHandler := adminhandlers.NewProductVATHandler(productSvc, pool, logger)
 	attributeHandler := adminhandlers.NewAttributeHandler(attributeSvc, productSvc, logger)
 	variantHandler := adminhandlers.NewVariantHandler(variantSvc, attributeSvc, productSvc, logger)
+	bomHandler := adminhandlers.NewBOMHandler(bomSvc, productSvc, rawMaterialSvc, variantSvc, logger)
 
 	// Admin server (HTMX + templ)
 	adminMux := http.NewServeMux()
@@ -100,6 +103,7 @@ func main() {
 	productVATHandler.RegisterRoutes(protectedMux)
 	attributeHandler.RegisterRoutes(protectedMux)
 	variantHandler.RegisterRoutes(protectedMux)
+	bomHandler.RegisterRoutes(protectedMux)
 	adminMux.Handle("/admin/", middleware.RequireAuth(authService)(protectedMux))
 
 	// Root redirect
