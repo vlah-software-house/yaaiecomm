@@ -42,6 +42,7 @@ coverage/
 
 # Go compiled binaries
 api/seed-admin
+api/server
 
 # sqlc generated (tracked but worth noting)
 # api/internal/database/gen/

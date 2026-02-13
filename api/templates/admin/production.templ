@@ -1,0 +1,420 @@
+package admin
+
+import (
+	"fmt"
+	"github.com/forgecommerce/api/templates/layouts"
+)
+
+type ProductionListData struct {
+	Batches      []ProductionListItem
+	StatusFilter string
+	CSRFToken    string
+}
+
+type ProductionListItem struct {
+	ID              string
+	BatchNumber     string
+	ProductName     string
+	VariantSku      string
+	PlannedQuantity int
+	ActualQuantity  int
+	Status          string
+	ScheduledDate   string
+	CreatedAt       string
+}
+
+type ProductionDetailData struct {
+	Batch     ProductionDetailItem
+	Materials []ProductionMaterialRow
+	CSRFToken string
+}
+
+type ProductionDetailItem struct {
+	ID              string
+	BatchNumber     string
+	ProductName     string
+	VariantSku      string
+	PlannedQuantity int
+	ActualQuantity  int
+	Status          string
+	ScheduledDate   string
+	StartedAt       string
+	CompletedAt     string
+	Notes           string
+	CostTotal       string
+	CreatedAt       string
+}
+
+type ProductionMaterialRow struct {
+	ID               string
+	MaterialName     string
+	MaterialSku      string
+	UnitOfMeasure    string
+	RequiredQuantity string
+	ConsumedQuantity string
+	AvailableStock   string
+	UnitCost         string
+}
+
+type ProductionFormData struct {
+	Products  []ProductionFormProduct
+	CSRFToken string
+}
+
+type ProductionFormProduct struct {
+	ID   string
+	Name string
+}
+
+func batchStatusBadgeClass(status string) string {
+	switch status {
+	case "draft":
+		return "badge-muted"
+	case "scheduled":
+		return "badge-primary"
+	case "in_progress":
+		return "badge-warning"
+	case "completed":
+		return "badge-success"
+	case "cancelled":
+		return "badge-danger"
+	default:
+		return "badge-muted"
+	}
+}
+
+func batchStatusLabel(status string) string {
+	switch status {
+	case "in_progress":
+		return "In Progress"
+	default:
+		return status
+	}
+}
+
+templ ProductionListPage(data ProductionListData) {
+	@layouts.AdminLayout("Production Batches", "/admin/production") {
+		<div class="page-header flex justify-between items-center">
+			<h2>Production Batches</h2>
+			<a href="/admin/production/new" class="btn btn-primary">New Batch</a>
+		</div>
+		<div class="card">
+			<div class="card-header flex justify-between items-center">
+				<span>All Batches</span>
+				<div class="flex gap-2">
+					<a
+						href="/admin/production"
+						class={ "btn btn-sm", templ.KV("btn-primary", data.StatusFilter == "") }
+					>All</a>
+					<a
+						href="/admin/production?status=draft"
+						class={ "btn btn-sm", templ.KV("btn-primary", data.StatusFilter == "draft") }
+					>Draft</a>
+					<a
+						href="/admin/production?status=scheduled"
+						class={ "btn btn-sm", templ.KV("btn-primary", data.StatusFilter == "scheduled") }
+					>Scheduled</a>
+					<a
+						href="/admin/production?status=in_progress"
+						class={ "btn btn-sm", templ.KV("btn-primary", data.StatusFilter == "in_progress") }
+					>In Progress</a>
+					<a
+						href="/admin/production?status=completed"
+						class={ "btn btn-sm", templ.KV("btn-primary", data.StatusFilter == "completed") }
+					>Completed</a>
+					<a
+						href="/admin/production?status=cancelled"
+						class={ "btn btn-sm", templ.KV("btn-primary", data.StatusFilter == "cancelled") }
+					>Cancelled</a>
+				</div>
+			</div>
+			<div class="table-container">
+				<table>
+					<thead>
+						<tr>
+							<th>Batch #</th>
+							<th>Product</th>
+							<th>Variant</th>
+							<th>Status</th>
+							<th>Planned</th>
+							<th>Actual</th>
+							<th>Scheduled</th>
+							<th>Created</th>
+							<th>Actions</th>
+						</tr>
+					</thead>
+					<tbody>
+						if len(data.Batches) == 0 {
+							<tr>
+								<td colspan="9" class="text-center text-muted" style="padding: 40px;">
+									No production batches found.
+								</td>
+							</tr>
+						}
+						for _, b := range data.Batches {
+							<tr>
+								<td>
+									<a href={ templ.SafeURL("/admin/production/" + b.ID) }>{ b.BatchNumber }</a>
+								</td>
+								<td>{ b.ProductName }</td>
+								<td>
+									if b.VariantSku != "" {
+										{ b.VariantSku }
+									} else {
+										<span class="text-muted">&mdash;</span>
+									}
+								</td>
+								<td>
+									<span class={ "badge", batchStatusBadgeClass(b.Status) }>{ batchStatusLabel(b.Status) }</span>
+								</td>
+								<td>{ fmt.Sprintf("%d", b.PlannedQuantity) }</td>
+								<td>{ fmt.Sprintf("%d", b.ActualQuantity) }</td>
+								<td>
+									if b.ScheduledDate != "" {
+										{ b.ScheduledDate }
+									} else {
+										<span class="text-muted">&mdash;</span>
+									}
+								</td>
+								<td class="text-muted">{ b.CreatedAt }</td>
+								<td>
+									<a href={ templ.SafeURL("/admin/production/" + b.ID) } class="btn btn-sm">View</a>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	}
+}
+
+templ ProductionNewPage(data ProductionFormData) {
+	@layouts.AdminLayout("New Production Batch", "/admin/production") {
+		<div class="page-header flex justify-between items-center">
+			<h2>New Production Batch</h2>
+			<a href="/admin/production" class="btn btn-sm">&larr; Back to Batches</a>
+		</div>
+		<div class="card">
+			<div class="card-header">Batch Details</div>
+			<div class="card-body">
+				<form method="POST" action="/admin/production">
+					<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+					<div class="form-group" style="margin-bottom: 16px;">
+						<label for="product_id">Product</label>
+						<select id="product_id" name="product_id" required>
+							<option value="">Select a product...</option>
+							for _, p := range data.Products {
+								<option value={ p.ID }>{ p.Name }</option>
+							}
+						</select>
+					</div>
+					<div class="form-group" style="margin-bottom: 16px;">
+						<label for="variant_id">Variant (optional)</label>
+						<input type="text" id="variant_id" name="variant_id" placeholder="Variant UUID (optional)"/>
+					</div>
+					<div class="form-group" style="margin-bottom: 16px;">
+						<label for="planned_quantity">Planned Quantity</label>
+						<input type="number" id="planned_quantity" name="planned_quantity" min="1" required/>
+					</div>
+					<div class="form-group" style="margin-bottom: 16px;">
+						<label for="scheduled_date">Scheduled Date (optional)</label>
+						<input type="date" id="scheduled_date" name="scheduled_date"/>
+					</div>
+					<div class="form-group" style="margin-bottom: 16px;">
+						<label for="notes">Notes</label>
+						<textarea id="notes" name="notes" rows="3"></textarea>
+					</div>
+					<div class="flex gap-2">
+						<button type="submit" class="btn btn-primary">Create Batch</button>
+						<a href="/admin/production" class="btn">Cancel</a>
+					</div>
+				</form>
+			</div>
+		</div>
+	}
+}
+
+templ ProductionDetailPage(data ProductionDetailData) {
+	@layouts.AdminLayout("Batch " + data.Batch.BatchNumber, "/admin/production") {
+		<div class="page-header flex justify-between items-center">
+			<h2>Batch { data.Batch.BatchNumber }</h2>
+			<a href="/admin/production" class="btn btn-sm">&larr; Back to Batches</a>
+		</div>
+		<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px; align-items: start;">
+			<!-- Left Column -->
+			<div>
+				<!-- Batch Info Card -->
+				<div class="card mb-3">
+					<div class="card-header">Batch Information</div>
+					<div class="card-body">
+						<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+							<div>
+								<p class="text-muted" style="font-size: 0.875rem; margin-bottom: 4px;">Status</p>
+								<span class={ "badge", batchStatusBadgeClass(data.Batch.Status) }>{ batchStatusLabel(data.Batch.Status) }</span>
+							</div>
+							<div>
+								<p class="text-muted" style="font-size: 0.875rem; margin-bottom: 4px;">Product</p>
+								<p>{ data.Batch.ProductName }</p>
+							</div>
+							if data.Batch.VariantSku != "" {
+								<div>
+									<p class="text-muted" style="font-size: 0.875rem; margin-bottom: 4px;">Variant SKU</p>
+									<p>{ data.Batch.VariantSku }</p>
+								</div>
+							}
+							<div>
+								<p class="text-muted" style="font-size: 0.875rem; margin-bottom: 4px;">Planned Quantity</p>
+								<p>{ fmt.Sprintf("%d", data.Batch.PlannedQuantity) }</p>
+							</div>
+							if data.Batch.ActualQuantity > 0 {
+								<div>
+									<p class="text-muted" style="font-size: 0.875rem; margin-bottom: 4px;">Actual Quantity</p>
+									<p>{ fmt.Sprintf("%d", data.Batch.ActualQuantity) }</p>
+								</div>
+							}
+							if data.Batch.ScheduledDate != "" {
+								<div>
+									<p class="text-muted" style="font-size: 0.875rem; margin-bottom: 4px;">Scheduled Date</p>
+									<p>{ data.Batch.ScheduledDate }</p>
+								</div>
+							}
+							if data.Batch.StartedAt != "" {
+								<div>
+									<p class="text-muted" style="font-size: 0.875rem; margin-bottom: 4px;">Started At</p>
+									<p>{ data.Batch.StartedAt }</p>
+								</div>
+							}
+							if data.Batch.CompletedAt != "" {
+								<div>
+									<p class="text-muted" style="font-size: 0.875rem; margin-bottom: 4px;">Completed At</p>
+									<p>{ data.Batch.CompletedAt }</p>
+								</div>
+							}
+							<div>
+								<p class="text-muted" style="font-size: 0.875rem; margin-bottom: 4px;">Created</p>
+								<p>{ data.Batch.CreatedAt }</p>
+							</div>
+						</div>
+						if data.Batch.Notes != "" {
+							<div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--gray-200);">
+								<p class="text-muted" style="font-size: 0.875rem; margin-bottom: 4px;">Notes</p>
+								<p>{ data.Batch.Notes }</p>
+							</div>
+						}
+					</div>
+				</div>
+				<!-- Materials Card -->
+				<div class="card">
+					<div class="card-header">Materials</div>
+					<div class="table-container">
+						<table>
+							<thead>
+								<tr>
+									<th>Material</th>
+									<th>SKU</th>
+									<th>Unit</th>
+									<th>Required</th>
+									<th>Consumed</th>
+									<th>Available</th>
+									<th>Unit Cost</th>
+								</tr>
+							</thead>
+							<tbody>
+								if len(data.Materials) == 0 {
+									<tr>
+										<td colspan="7" class="text-center text-muted" style="padding: 40px;">
+											No materials assigned to this batch.
+										</td>
+									</tr>
+								}
+								for _, m := range data.Materials {
+									<tr>
+										<td>{ m.MaterialName }</td>
+										<td class="text-muted">{ m.MaterialSku }</td>
+										<td>{ m.UnitOfMeasure }</td>
+										<td>{ m.RequiredQuantity }</td>
+										<td>{ m.ConsumedQuantity }</td>
+										<td>{ m.AvailableStock }</td>
+										<td>{ m.UnitCost }</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</div>
+			<!-- Right Column -->
+			<div>
+				<!-- Totals Card -->
+				if data.Batch.CostTotal != "" {
+					<div class="card mb-3">
+						<div class="card-header">Cost Summary</div>
+						<div class="card-body">
+							<div style="display: flex; justify-content: space-between; font-weight: 600; font-size: 1.1rem;">
+								<span>Total Cost</span>
+								<span>{ data.Batch.CostTotal }</span>
+							</div>
+						</div>
+					</div>
+				}
+				<!-- Actions Card -->
+				<div class="card" id="batch-actions-card">
+					<div class="card-header">Actions</div>
+					<div class="card-body">
+						if data.Batch.Status == "draft" || data.Batch.Status == "scheduled" {
+							<form method="POST" action={ templ.SafeURL("/admin/production/" + data.Batch.ID + "/start") } style="margin-bottom: 12px;">
+								<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+								<button
+									type="submit"
+									class="btn btn-primary btn-sm"
+									style="width: 100%;"
+									onclick="return confirm('Start this production batch?')"
+								>
+									Start Production
+								</button>
+							</form>
+							<form method="POST" action={ templ.SafeURL("/admin/production/" + data.Batch.ID + "/cancel") }>
+								<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+								<button
+									type="submit"
+									class="btn btn-danger btn-sm"
+									style="width: 100%;"
+									onclick="return confirm('Cancel this production batch?')"
+								>
+									Cancel Batch
+								</button>
+							</form>
+						}
+						if data.Batch.Status == "in_progress" {
+							<form method="POST" action={ templ.SafeURL("/admin/production/" + data.Batch.ID + "/complete") }>
+								<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+								<div class="form-group" style="margin-bottom: 12px;">
+									<label for="actual_quantity">Actual Quantity Produced</label>
+									<input type="number" id="actual_quantity" name="actual_quantity" min="0" required/>
+								</div>
+								<div class="form-group" style="margin-bottom: 12px;">
+									<label for="cost_total">Total Cost</label>
+									<input type="text" id="cost_total" name="cost_total" placeholder="0.00" required/>
+								</div>
+								<button
+									type="submit"
+									class="btn btn-primary btn-sm"
+									style="width: 100%;"
+									onclick="return confirm('Complete this production batch?')"
+								>
+									Complete Batch
+								</button>
+							</form>
+						}
+						if data.Batch.Status == "completed" || data.Batch.Status == "cancelled" {
+							<p class="text-muted text-center">
+								This batch is { batchStatusLabel(data.Batch.Status) }. No further actions available.
+							</p>
+						}
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}

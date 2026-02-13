@@ -10,6 +10,7 @@ templ Base(title string) {
 			<script src="https://unpkg.com/htmx.org@2.0.4"></script>
 			<script defer src="https://unpkg.com/alpinejs@3.14.8/dist/cdn.min.js"></script>
 			<link rel="stylesheet" href="/static/css/admin.css"/>
+			<script defer src="/static/js/admin.js"></script>
 		</head>
 		<body class="bg-gray-50 text-gray-900">
 			{ children... }
@@ -31,9 +32,12 @@ templ AdminLayout(title string, currentPath string) {
 					@navItem("/admin/products", "Products", currentPath)
 					@navItem("/admin/categories", "Categories", currentPath)
 					@navItem("/admin/inventory/raw-materials", "Raw Materials", currentPath)
+					@navItem("/admin/production", "Production", currentPath)
 					@navItem("/admin/orders", "Orders", currentPath)
 					@navItem("/admin/customers", "Customers", currentPath)
 					@navItem("/admin/reports/sales", "Reports", currentPath)
+					@navItem("/admin/import", "Import / Export", currentPath)
+					@navItem("/admin/webhooks", "Webhooks", currentPath)
 					<hr class="nav-divider"/>
 					@navItem("/admin/settings/vat", "VAT Settings", currentPath)
 					@navItem("/admin/settings/countries", "Selling Countries", currentPath)

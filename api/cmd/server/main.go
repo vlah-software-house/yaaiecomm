@@ -24,11 +24,13 @@ import (
 	"github.com/forgecommerce/api/internal/services/customer"
 	"github.com/forgecommerce/api/internal/services/discount"
 	"github.com/forgecommerce/api/internal/services/order"
+	"github.com/forgecommerce/api/internal/services/production"
 	"github.com/forgecommerce/api/internal/services/product"
 	"github.com/forgecommerce/api/internal/services/rawmaterial"
 	"github.com/forgecommerce/api/internal/services/report"
 	"github.com/forgecommerce/api/internal/services/shipping"
 	"github.com/forgecommerce/api/internal/services/variant"
+	"github.com/forgecommerce/api/internal/services/webhook"
 	forgestripe "github.com/forgecommerce/api/internal/stripe"
 	"github.com/forgecommerce/api/internal/vat"
 )
@@ -87,6 +89,8 @@ func main() {
 	shippingSvc := shipping.NewService(pool, logger)
 	cartSvc := cart.NewService(pool, logger)
 	reportSvc := report.NewService(pool, logger)
+	productionSvc := production.NewService(pool, logger)
+	webhookSvc := webhook.NewService(pool, logger)
 
 	// Initialize public API handlers
 	queries := db.New(pool)
@@ -117,6 +121,9 @@ func main() {
 	dashboardHandler := adminhandlers.NewDashboardHandler(pool, queries, logger)
 	userHandler := adminhandlers.NewUserHandler(authService, logger)
 	reportHandler := adminhandlers.NewReportHandler(reportSvc, logger)
+	productionHandler := adminhandlers.NewProductionHandler(productionSvc, productSvc, logger)
+	adminWebhookHandler := adminhandlers.NewWebhookHandler(webhookSvc, logger)
+	csvioHandler := adminhandlers.NewCSVIOHandler(productSvc, rawMaterialSvc, orderSvc, logger)
 
 	// Admin server (HTMX + templ)
 	adminMux := http.NewServeMux()
@@ -150,6 +157,9 @@ func main() {
 	dashboardHandler.RegisterRoutes(protectedMux)
 	userHandler.RegisterRoutes(protectedMux)
 	reportHandler.RegisterRoutes(protectedMux)
+	productionHandler.RegisterRoutes(protectedMux)
+	adminWebhookHandler.RegisterRoutes(protectedMux)
+	csvioHandler.RegisterRoutes(protectedMux)
 	adminMux.Handle("/admin/", middleware.RequireAuth(authService)(protectedMux))
 
 	// Root redirect

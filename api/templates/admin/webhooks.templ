@@ -1,0 +1,377 @@
+package admin
+
+import (
+	"fmt"
+	"github.com/forgecommerce/api/templates/layouts"
+)
+
+type WebhookListData struct {
+	Endpoints []WebhookEndpointItem
+	CSRFToken string
+}
+
+type WebhookEndpointItem struct {
+	ID          string
+	Url         string
+	Description string
+	Events      string // comma-separated
+	IsActive    bool
+	CreatedAt   string
+}
+
+type WebhookFormData struct {
+	Endpoint  *WebhookEndpointItem // nil for new
+	IsEdit    bool
+	CSRFToken string
+	Error     string
+	Secret    string // only shown on create
+	AllEvents []string
+}
+
+type WebhookDetailData struct {
+	Endpoint   WebhookEndpointItem
+	Deliveries []WebhookDeliveryItem
+	CSRFToken  string
+	Page       int
+	TotalPages int
+}
+
+type WebhookDeliveryItem struct {
+	ID             string
+	EventType      string
+	ResponseStatus string
+	Attempt        int
+	DeliveredAt    string
+	CreatedAt      string
+}
+
+templ WebhookListPage(data WebhookListData) {
+	@layouts.AdminLayout("Webhooks", "/admin/webhooks") {
+		<div class="page-header flex justify-between items-center">
+			<h2>Webhook Endpoints</h2>
+			<a href="/admin/webhooks/new" class="btn btn-primary">+ New Endpoint</a>
+		</div>
+		<div class="card">
+			<div class="table-container">
+				<table>
+					<thead>
+						<tr>
+							<th>URL</th>
+							<th>Description</th>
+							<th>Events</th>
+							<th>Status</th>
+							<th>Created</th>
+							<th>Actions</th>
+						</tr>
+					</thead>
+					<tbody>
+						if len(data.Endpoints) == 0 {
+							<tr>
+								<td colspan="6" class="text-center text-muted" style="padding: 40px;">
+									No webhook endpoints configured. <a href="/admin/webhooks/new">Create one.</a>
+								</td>
+							</tr>
+						}
+						for _, ep := range data.Endpoints {
+							<tr>
+								<td>
+									<a href={ templ.SafeURL("/admin/webhooks/" + ep.ID) } class="text-primary">
+										{ ep.Url }
+									</a>
+								</td>
+								<td class="text-muted">{ ep.Description }</td>
+								<td>
+									<span class="text-muted" style="font-size: 0.875rem;">{ ep.Events }</span>
+								</td>
+								<td>
+									if ep.IsActive {
+										<span class="badge badge-success">Active</span>
+									} else {
+										<span class="badge badge-warning">Inactive</span>
+									}
+								</td>
+								<td class="text-muted">{ ep.CreatedAt }</td>
+								<td class="flex gap-2">
+									<a href={ templ.SafeURL("/admin/webhooks/" + ep.ID + "/edit") } class="btn btn-sm">Edit</a>
+									<form method="POST" action={ templ.SafeURL("/admin/webhooks/" + ep.ID + "/delete") } onsubmit="return confirm('Delete this webhook endpoint?');">
+										<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+										<button type="submit" class="btn btn-sm btn-error">Delete</button>
+									</form>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	}
+}
+
+templ WebhookFormPage(data WebhookFormData) {
+	@layouts.AdminLayout(formTitle(data.IsEdit), "/admin/webhooks") {
+		<div class="page-header">
+			<h2>
+				if data.IsEdit {
+					Edit Webhook Endpoint
+				} else {
+					New Webhook Endpoint
+				}
+			</h2>
+		</div>
+		if data.Error != "" {
+			<div class="alert alert-error mb-2">{ data.Error }</div>
+		}
+		<div class="card">
+			<form
+				method="POST"
+				if data.IsEdit {
+					action={ templ.SafeURL("/admin/webhooks/" + data.Endpoint.ID) }
+				} else {
+					action="/admin/webhooks"
+				}
+			>
+				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+				<div class="card-body">
+					<div class="form-grid">
+						<div class="form-group" style="grid-column: 1 / -1;">
+							<label for="url">URL</label>
+							<input
+								type="url"
+								id="url"
+								name="url"
+								required
+								placeholder="https://example.com/webhooks"
+								if data.IsEdit && data.Endpoint != nil {
+									value={ data.Endpoint.Url }
+								}
+							/>
+							<p class="text-muted" style="margin-top: 4px; font-size: 0.875rem;">
+								The URL that will receive POST requests for webhook events.
+							</p>
+						</div>
+						if !data.IsEdit {
+							<div class="form-group" style="grid-column: 1 / -1;">
+								<label for="secret">Signing Secret</label>
+								<input
+									type="text"
+									id="secret"
+									name="secret"
+									required
+									placeholder="Enter a secret for HMAC-SHA256 signing"
+								/>
+								<p class="text-muted" style="margin-top: 4px; font-size: 0.875rem;">
+									Used to sign payloads with HMAC-SHA256. Store this securely — it cannot be viewed later.
+								</p>
+							</div>
+						}
+						<div class="form-group" style="grid-column: 1 / -1;">
+							<label for="description">Description</label>
+							<input
+								type="text"
+								id="description"
+								name="description"
+								placeholder="Optional description"
+								if data.IsEdit && data.Endpoint != nil {
+									value={ data.Endpoint.Description }
+								}
+							/>
+						</div>
+						<div class="form-group" style="grid-column: 1 / -1;">
+							<label>Events</label>
+							<p class="text-muted" style="margin-bottom: 8px; font-size: 0.875rem;">
+								Select which events this endpoint should receive.
+							</p>
+							<div style="display: flex; flex-wrap: wrap; gap: 12px;">
+								for _, ev := range data.AllEvents {
+									<label style="display: flex; align-items: center; gap: 4px; font-weight: normal;">
+										<input
+											type="checkbox"
+											name="events"
+											value={ ev }
+											if data.IsEdit && data.Endpoint != nil && containsEvent(data.Endpoint.Events, ev) {
+												checked
+											}
+										/>
+										{ ev }
+									</label>
+								}
+							</div>
+						</div>
+						<div class="form-group" style="grid-column: 1 / -1;">
+							<label style="display: flex; align-items: center; gap: 6px; font-weight: normal;">
+								<input
+									type="checkbox"
+									name="is_active"
+									value="true"
+									if !data.IsEdit || (data.Endpoint != nil && data.Endpoint.IsActive) {
+										checked
+									}
+								/>
+								Active
+							</label>
+							<p class="text-muted" style="margin-top: 4px; font-size: 0.875rem;">
+								Inactive endpoints will not receive any webhook deliveries.
+							</p>
+						</div>
+					</div>
+				</div>
+				<div class="card-body" style="border-top: 1px solid var(--gray-200); display: flex; justify-content: flex-end; gap: 8px;">
+					<a href="/admin/webhooks" class="btn">Cancel</a>
+					<button type="submit" class="btn btn-primary">
+						if data.IsEdit {
+							Update Endpoint
+						} else {
+							Create Endpoint
+						}
+					</button>
+				</div>
+			</form>
+		</div>
+	}
+}
+
+templ WebhookDetailPage(data WebhookDetailData) {
+	@layouts.AdminLayout("Webhook: "+data.Endpoint.Url, "/admin/webhooks") {
+		<div class="page-header flex justify-between items-center">
+			<div>
+				<h2>{ data.Endpoint.Url }</h2>
+				<p class="text-muted">
+					if data.Endpoint.Description != "" {
+						{ data.Endpoint.Description } &mdash;
+					}
+					if data.Endpoint.IsActive {
+						<span class="badge badge-success">Active</span>
+					} else {
+						<span class="badge badge-warning">Inactive</span>
+					}
+				</p>
+			</div>
+			<div class="flex gap-2">
+				<a href={ templ.SafeURL("/admin/webhooks/" + data.Endpoint.ID + "/edit") } class="btn">Edit</a>
+				<a href="/admin/webhooks" class="btn">Back</a>
+			</div>
+		</div>
+		<div class="card">
+			<div class="card-header">Recent Deliveries</div>
+			<div class="table-container">
+				<table>
+					<thead>
+						<tr>
+							<th>Event</th>
+							<th>Status</th>
+							<th>Attempts</th>
+							<th>Delivered</th>
+							<th>Created</th>
+						</tr>
+					</thead>
+					<tbody>
+						if len(data.Deliveries) == 0 {
+							<tr>
+								<td colspan="5" class="text-center text-muted" style="padding: 40px;">
+									No deliveries yet.
+								</td>
+							</tr>
+						}
+						for _, d := range data.Deliveries {
+							<tr>
+								<td>{ d.EventType }</td>
+								<td>
+									if d.DeliveredAt != "" {
+										<span class="badge badge-success">{ d.ResponseStatus }</span>
+									} else if d.ResponseStatus != "" {
+										<span class="badge badge-error">{ d.ResponseStatus }</span>
+									} else {
+										<span class="badge badge-warning">Pending</span>
+									}
+								</td>
+								<td>{ fmt.Sprintf("%d", d.Attempt) }</td>
+								<td class="text-muted">
+									if d.DeliveredAt != "" {
+										{ d.DeliveredAt }
+									} else {
+										&mdash;
+									}
+								</td>
+								<td class="text-muted">{ d.CreatedAt }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+			if data.TotalPages > 1 {
+				<div class="card-body" style="border-top: 1px solid var(--gray-200); display: flex; justify-content: center; gap: 8px;">
+					if data.Page > 1 {
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/admin/webhooks/%s?page=%d", data.Endpoint.ID, data.Page-1)) }
+							class="btn btn-sm"
+						>
+							Previous
+						</a>
+					}
+					<span class="text-muted" style="padding: 6px 12px;">
+						Page { fmt.Sprintf("%d", data.Page) } of { fmt.Sprintf("%d", data.TotalPages) }
+					</span>
+					if data.Page < data.TotalPages {
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/admin/webhooks/%s?page=%d", data.Endpoint.ID, data.Page+1)) }
+							class="btn btn-sm"
+						>
+							Next
+						</a>
+					}
+				</div>
+			}
+		</div>
+	}
+}
+
+func formTitle(isEdit bool) string {
+	if isEdit {
+		return "Edit Webhook"
+	}
+	return "New Webhook"
+}
+
+func containsEvent(eventsCSV string, event string) bool {
+	// events is comma-separated in the template data
+	for _, e := range splitEvents(eventsCSV) {
+		if e == event {
+			return true
+		}
+	}
+	return false
+}
+
+func splitEvents(s string) []string {
+	if s == "" {
+		return nil
+	}
+	var result []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == ',' {
+			part := trimSpace(s[start:i])
+			if part != "" {
+				result = append(result, part)
+			}
+			start = i + 1
+		}
+	}
+	part := trimSpace(s[start:])
+	if part != "" {
+		result = append(result, part)
+	}
+	return result
+}
+
+func trimSpace(s string) string {
+	i := 0
+	for i < len(s) && (s[i] == ' ' || s[i] == '\t') {
+		i++
+	}
+	j := len(s)
+	for j > i && (s[j-1] == ' ' || s[j-1] == '\t') {
+		j--
+	}
+	return s[i:j]
+}

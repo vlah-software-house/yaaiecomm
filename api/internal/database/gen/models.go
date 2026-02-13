@@ -5,12 +5,59 @@
 package db
 
 import (
+	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+type ProductionBatchStatus string
+
+const (
+	ProductionBatchStatusDraft      ProductionBatchStatus = "draft"
+	ProductionBatchStatusScheduled  ProductionBatchStatus = "scheduled"
+	ProductionBatchStatusInProgress ProductionBatchStatus = "in_progress"
+	ProductionBatchStatusCompleted  ProductionBatchStatus = "completed"
+	ProductionBatchStatusCancelled  ProductionBatchStatus = "cancelled"
+)
+
+func (e *ProductionBatchStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ProductionBatchStatus(s)
+	case string:
+		*e = ProductionBatchStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ProductionBatchStatus: %T", src)
+	}
+	return nil
+}
+
+type NullProductionBatchStatus struct {
+	ProductionBatchStatus ProductionBatchStatus `json:"production_batch_status"`
+	Valid                 bool                  `json:"valid"` // Valid is true if ProductionBatchStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullProductionBatchStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.ProductionBatchStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ProductionBatchStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullProductionBatchStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ProductionBatchStatus), nil
+}
 
 type AdminAuditLog struct {
 	ID          uuid.UUID   `json:"id"`
@@ -375,6 +422,33 @@ type ProductVatOverride struct {
 	Notes         *string   `json:"notes"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+type ProductionBatch struct {
+	ID              uuid.UUID             `json:"id"`
+	BatchNumber     string                `json:"batch_number"`
+	ProductID       uuid.UUID             `json:"product_id"`
+	VariantID       pgtype.UUID           `json:"variant_id"`
+	PlannedQuantity int32                 `json:"planned_quantity"`
+	ActualQuantity  *int32                `json:"actual_quantity"`
+	Status          ProductionBatchStatus `json:"status"`
+	ScheduledDate   pgtype.Date           `json:"scheduled_date"`
+	StartedAt       pgtype.Timestamptz    `json:"started_at"`
+	CompletedAt     pgtype.Timestamptz    `json:"completed_at"`
+	Notes           *string               `json:"notes"`
+	CostTotal       pgtype.Numeric        `json:"cost_total"`
+	CreatedBy       pgtype.UUID           `json:"created_by"`
+	CreatedAt       time.Time             `json:"created_at"`
+	UpdatedAt       time.Time             `json:"updated_at"`
+}
+
+type ProductionBatchMaterial struct {
+	ID               uuid.UUID      `json:"id"`
+	BatchID          uuid.UUID      `json:"batch_id"`
+	RawMaterialID    uuid.UUID      `json:"raw_material_id"`
+	RequiredQuantity pgtype.Numeric `json:"required_quantity"`
+	ConsumedQuantity pgtype.Numeric `json:"consumed_quantity"`
+	UnitCost         pgtype.Numeric `json:"unit_cost"`
 }
 
 type RawMaterial struct {
