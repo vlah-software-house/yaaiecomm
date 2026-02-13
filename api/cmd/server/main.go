@@ -13,6 +13,7 @@ import (
 	"github.com/forgecommerce/api/internal/auth"
 	"github.com/forgecommerce/api/internal/config"
 	"github.com/forgecommerce/api/internal/database"
+	db "github.com/forgecommerce/api/internal/database/gen"
 	adminhandlers "github.com/forgecommerce/api/internal/handlers/admin"
 	apihandlers "github.com/forgecommerce/api/internal/handlers/api"
 	"github.com/forgecommerce/api/internal/middleware"
@@ -20,12 +21,14 @@ import (
 	"github.com/forgecommerce/api/internal/services/bom"
 	"github.com/forgecommerce/api/internal/services/cart"
 	"github.com/forgecommerce/api/internal/services/category"
+	"github.com/forgecommerce/api/internal/services/customer"
 	"github.com/forgecommerce/api/internal/services/discount"
 	"github.com/forgecommerce/api/internal/services/order"
 	"github.com/forgecommerce/api/internal/services/product"
 	"github.com/forgecommerce/api/internal/services/rawmaterial"
 	"github.com/forgecommerce/api/internal/services/shipping"
 	"github.com/forgecommerce/api/internal/services/variant"
+	forgestripe "github.com/forgecommerce/api/internal/stripe"
 	"github.com/forgecommerce/api/internal/vat"
 )
 
@@ -55,14 +58,20 @@ func main() {
 
 	slog.Info("migrations complete")
 
-	// Initialize auth service
+	// Initialize auth services
 	sessionMgr := auth.NewSessionManager(pool, 8*time.Hour)
 	authService := auth.NewService(pool, sessionMgr, logger, cfg.TOTPIssuer)
+	jwtMgr := auth.NewJWTManager(cfg.JWTSecret)
+
+	// Initialize Stripe service
+	stripeSvc := forgestripe.NewService(cfg.StripeSecretKey, logger)
 
 	// Initialize VAT services
 	vatCache := vat.NewRateCache()
 	vatSyncer := vat.NewRateSyncer(pool, cfg.VAT, logger, vatCache)
 	vatScheduler := vat.NewScheduler(vatSyncer, logger)
+	vatSvc := vat.NewVATService(pool, vatCache, logger)
+	viesClient := vat.NewVIESClient(pool, cfg.VAT.VIESTimeout, cfg.VAT.VIESCacheTTL, logger)
 
 	// Initialize services
 	productSvc := product.NewService(pool, logger)
@@ -72,13 +81,23 @@ func main() {
 	variantSvc := variant.NewService(pool, logger)
 	bomSvc := bom.NewService(pool, logger)
 	orderSvc := order.NewService(pool, logger)
+	customerSvc := customer.NewService(pool, logger)
 	discountSvc := discount.NewService(pool, logger)
 	shippingSvc := shipping.NewService(pool, logger)
 	cartSvc := cart.NewService(pool, logger)
 
 	// Initialize public API handlers
+	queries := db.New(pool)
 	publicHandler := apihandlers.NewPublicHandler(productSvc, categorySvc, variantSvc, pool, logger)
 	cartHandler := apihandlers.NewCartHandler(cartSvc, logger)
+	customerHandler := apihandlers.NewCustomerHandler(customerSvc, jwtMgr, logger)
+	vatNumberHandler := apihandlers.NewVATNumberHandler(cartSvc, viesClient, logger)
+	checkoutHandler := apihandlers.NewCheckoutHandler(
+		cartSvc, orderSvc, vatSvc, shippingSvc, queries, logger,
+		cfg.BaseURL+"/checkout/success?session_id={CHECKOUT_SESSION_ID}",
+		cfg.BaseURL+"/checkout/cancel",
+	)
+	webhookHandler := apihandlers.NewWebhookHandler(stripeSvc, orderSvc, logger, cfg.StripeWebhookKey)
 
 	// Initialize admin handlers
 	adminHandler := adminhandlers.NewHandler(authService, logger)
@@ -153,9 +172,19 @@ func main() {
 		fmt.Fprintln(w, `{"status":"ok"}`)
 	})
 
-	// Register public API routes
+	// Register public API routes (no auth required)
 	publicHandler.RegisterRoutes(apiMux)
 	cartHandler.RegisterRoutes(apiMux)
+	customerHandler.RegisterPublicRoutes(apiMux)
+	vatNumberHandler.RegisterRoutes(apiMux)
+	checkoutHandler.RegisterRoutes(apiMux)
+	webhookHandler.RegisterRoutes(apiMux)
+
+	// Register protected customer API routes (JWT auth required)
+	customerProtectedMux := http.NewServeMux()
+	customerHandler.RegisterProtectedRoutes(customerProtectedMux)
+	apiMux.Handle("/api/v1/customers/me", middleware.RequireCustomerAuth(jwtMgr)(customerProtectedMux))
+	apiMux.Handle("/api/v1/customers/me/", middleware.RequireCustomerAuth(jwtMgr)(customerProtectedMux))
 
 	// Apply API middleware stack (CORS for storefront, logging, recovery)
 	var apiChain http.Handler = apiMux
