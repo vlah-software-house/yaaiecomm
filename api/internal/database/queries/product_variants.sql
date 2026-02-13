@@ -51,3 +51,7 @@ JOIN products p ON p.id = pv.product_id
 WHERE pv.stock_quantity <= pv.low_stock_threshold AND pv.is_active = true
 ORDER BY pv.stock_quantity ASC
 LIMIT $1;
+
+-- name: CountLowStockVariants :one
+SELECT COUNT(*) FROM product_variants
+WHERE stock_quantity <= low_stock_threshold AND is_active = true;

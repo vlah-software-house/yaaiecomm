@@ -417,8 +417,8 @@ func (h *DiscountHandler) CreateCoupon(w http.ResponseWriter, r *http.Request) {
 }
 
 // DeleteCoupon handles POST /admin/coupons/{id}/delete.
-// Stub: returns 200 OK (empty body) so the HTMX swap removes the row.
-// A proper delete query should be added to the database layer in the future.
+// Permanently removes a coupon and returns an empty body so the
+// HTMX hx-swap="outerHTML" removes the row from the table.
 func (h *DiscountHandler) DeleteCoupon(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -426,9 +426,13 @@ func (h *DiscountHandler) DeleteCoupon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.logger.Warn("coupon delete not yet implemented, returning 200 OK stub",
-		"coupon_id", id,
-	)
+	if err := h.discounts.DeleteCoupon(r.Context(), id); err != nil {
+		h.logger.Error("failed to delete coupon", "coupon_id", id, "error", err)
+		http.Error(w, "Failed to delete coupon", http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.Info("coupon deleted", "coupon_id", id)
 
 	// Return empty 200 OK so the HTMX hx-swap="outerHTML" removes the row.
 	w.Header().Set("Content-Type", "text/html")

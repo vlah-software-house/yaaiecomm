@@ -127,6 +127,24 @@ func (q *Queries) CreateDiscount(ctx context.Context, arg CreateDiscountParams) 
 	return i, err
 }
 
+const deleteCoupon = `-- name: DeleteCoupon :exec
+DELETE FROM coupons WHERE id = $1
+`
+
+func (q *Queries) DeleteCoupon(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteCoupon, id)
+	return err
+}
+
+const deleteDiscount = `-- name: DeleteDiscount :exec
+DELETE FROM discounts WHERE id = $1
+`
+
+func (q *Queries) DeleteDiscount(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteDiscount, id)
+	return err
+}
+
 const getCoupon = `-- name: GetCoupon :one
 SELECT id, code, discount_id, usage_limit, usage_limit_per_customer, usage_count, starts_at, ends_at, is_active, created_at, updated_at FROM coupons WHERE id = $1
 `

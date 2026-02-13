@@ -341,6 +341,25 @@ func (s *Service) IncrementCouponUsage(ctx context.Context, couponID uuid.UUID) 
 	return nil
 }
 
+// DeleteCoupon permanently removes a coupon by ID.
+func (s *Service) DeleteCoupon(ctx context.Context, id uuid.UUID) error {
+	err := s.queries.DeleteCoupon(ctx, id)
+	if err != nil {
+		return fmt.Errorf("deleting coupon: %w", err)
+	}
+	return nil
+}
+
+// DeleteDiscount permanently removes a discount by ID.
+// Coupons linked to the discount are cascade-deleted by the DB constraint.
+func (s *Service) DeleteDiscount(ctx context.Context, id uuid.UUID) error {
+	err := s.queries.DeleteDiscount(ctx, id)
+	if err != nil {
+		return fmt.Errorf("deleting discount: %w", err)
+	}
+	return nil
+}
+
 // --------------------------------------------------------------------------
 // Discount calculation engine
 // --------------------------------------------------------------------------

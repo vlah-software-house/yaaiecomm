@@ -515,6 +515,49 @@ func (q *Queries) ListOrders(ctx context.Context, arg ListOrdersParams) ([]Order
 	return items, nil
 }
 
+const listRecentOrders = `-- name: ListRecentOrders :many
+SELECT id, order_number, email, status, payment_status, total, created_at
+FROM orders ORDER BY created_at DESC LIMIT $1
+`
+
+type ListRecentOrdersRow struct {
+	ID            uuid.UUID      `json:"id"`
+	OrderNumber   int64          `json:"order_number"`
+	Email         string         `json:"email"`
+	Status        string         `json:"status"`
+	PaymentStatus string         `json:"payment_status"`
+	Total         pgtype.Numeric `json:"total"`
+	CreatedAt     time.Time      `json:"created_at"`
+}
+
+func (q *Queries) ListRecentOrders(ctx context.Context, limit int32) ([]ListRecentOrdersRow, error) {
+	rows, err := q.db.Query(ctx, listRecentOrders, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRecentOrdersRow{}
+	for rows.Next() {
+		var i ListRecentOrdersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrderNumber,
+			&i.Email,
+			&i.Status,
+			&i.PaymentStatus,
+			&i.Total,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const sumRevenueMonth = `-- name: SumRevenueMonth :one
 SELECT COALESCE(SUM(total), 0) FROM orders
 WHERE created_at >= date_trunc('month', CURRENT_DATE) AND payment_status = 'paid'

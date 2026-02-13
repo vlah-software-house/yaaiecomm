@@ -48,3 +48,9 @@ RETURNING *;
 
 -- name: IncrementCouponUsage :exec
 UPDATE coupons SET usage_count = usage_count + 1, updated_at = $2 WHERE id = $1;
+
+-- name: DeleteCoupon :exec
+DELETE FROM coupons WHERE id = $1;
+
+-- name: DeleteDiscount :exec
+DELETE FROM discounts WHERE id = $1;

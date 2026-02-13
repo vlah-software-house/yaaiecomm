@@ -112,6 +112,8 @@ func main() {
 	orderHandler := adminhandlers.NewOrderHandler(orderSvc, logger)
 	discountHandler := adminhandlers.NewDiscountHandler(discountSvc, logger)
 	shippingHandler := adminhandlers.NewShippingHandler(shippingSvc, logger)
+	dashboardHandler := adminhandlers.NewDashboardHandler(pool, queries, logger)
+	userHandler := adminhandlers.NewUserHandler(authService, logger)
 
 	// Admin server (HTMX + templ)
 	adminMux := http.NewServeMux()
@@ -142,6 +144,8 @@ func main() {
 	orderHandler.RegisterRoutes(protectedMux)
 	discountHandler.RegisterRoutes(protectedMux)
 	shippingHandler.RegisterRoutes(protectedMux)
+	dashboardHandler.RegisterRoutes(protectedMux)
+	userHandler.RegisterRoutes(protectedMux)
 	adminMux.Handle("/admin/", middleware.RequireAuth(authService)(protectedMux))
 
 	// Root redirect

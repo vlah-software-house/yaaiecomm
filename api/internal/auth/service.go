@@ -379,6 +379,55 @@ func (s *Service) ValidateSession(ctx context.Context, token string) (*AdminUser
 	return user, sess, nil
 }
 
+// ListUsers returns all admin users ordered by creation date.
+func (s *Service) ListUsers(ctx context.Context) ([]*AdminUser, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, email, name, password_hash, role, permissions,
+		       totp_secret, totp_verified, recovery_codes, force_2fa_setup,
+		       is_active, last_login_at, created_at, updated_at
+		FROM admin_users
+		ORDER BY created_at DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("listing admin users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []*AdminUser
+	for rows.Next() {
+		user, err := s.scanUser(rows)
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, user)
+	}
+	return users, rows.Err()
+}
+
+// UpdateUser updates the name, role, permissions, and active status of an admin user.
+func (s *Service) UpdateUser(ctx context.Context, id uuid.UUID, name, role string, permissions []string, isActive bool) (*AdminUser, error) {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE admin_users
+		SET name = $1, role = $2, permissions = $3, is_active = $4, updated_at = $5
+		WHERE id = $6
+	`, name, role, permissions, isActive, time.Now().UTC(), id)
+	if err != nil {
+		return nil, fmt.Errorf("updating admin user: %w", err)
+	}
+	return s.GetUserByID(ctx, id)
+}
+
+// SetUserActive enables or disables an admin user account.
+func (s *Service) SetUserActive(ctx context.Context, id uuid.UUID, isActive bool) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE admin_users SET is_active = $1, updated_at = $2 WHERE id = $3
+	`, isActive, time.Now().UTC(), id)
+	if err != nil {
+		return fmt.Errorf("setting admin user active status: %w", err)
+	}
+	return nil
+}
+
 // scanUser scans a single admin user row from a query result.
 func (s *Service) scanUser(row pgx.Row) (*AdminUser, error) {
 	user := &AdminUser{}

@@ -74,3 +74,7 @@ WHERE created_at >= date_trunc('month', CURRENT_DATE) AND payment_status = 'paid
 
 -- name: CountPendingOrders :one
 SELECT COUNT(*) FROM orders WHERE status = 'pending';
+
+-- name: ListRecentOrders :many
+SELECT id, order_number, email, status, payment_status, total, created_at
+FROM orders ORDER BY created_at DESC LIMIT $1;

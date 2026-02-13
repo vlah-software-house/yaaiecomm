@@ -1,0 +1,202 @@
+package admin
+
+import (
+	"fmt"
+	"github.com/forgecommerce/api/internal/auth"
+	"github.com/forgecommerce/api/templates/layouts"
+)
+
+type UserListData struct {
+	Users     []*auth.AdminUser
+	CSRFToken string
+}
+
+type UserFormData struct {
+	User      *auth.AdminUser // nil for new user
+	IsEdit    bool
+	CSRFToken string
+	Error     string
+}
+
+templ UserListPage(data UserListData) {
+	@layouts.AdminLayout("Admin Users", "/admin/users") {
+		<div class="page-header flex justify-between items-center">
+			<h2>Admin Users</h2>
+			<a href="/admin/users/new" class="btn btn-primary">+ New User</a>
+		</div>
+		<div class="card">
+			<div class="table-container">
+				<table>
+					<thead>
+						<tr>
+							<th>Name</th>
+							<th>Email</th>
+							<th>Role</th>
+							<th>2FA</th>
+							<th>Status</th>
+							<th>Last Login</th>
+							<th>Actions</th>
+						</tr>
+					</thead>
+					<tbody>
+						if len(data.Users) == 0 {
+							<tr>
+								<td colspan="7" class="text-center text-muted" style="padding: 40px;">
+									No admin users found. <a href="/admin/users/new">Create one.</a>
+								</td>
+							</tr>
+						}
+						for _, user := range data.Users {
+							@UserTableRow(user, data.CSRFToken)
+						}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	}
+}
+
+templ UserTableRow(user *auth.AdminUser, csrfToken string) {
+	<tr id={ "user-row-" + user.ID.String() }>
+		<td>{ user.Name }</td>
+		<td class="text-muted">{ user.Email }</td>
+		<td>{ user.Role }</td>
+		<td>
+			if user.TOTPVerified {
+				<span class="badge badge-success">Enabled</span>
+			} else {
+				<span class="badge badge-warning">Not set up</span>
+			}
+		</td>
+		<td>
+			if user.IsActive {
+				<span class="badge badge-success">Active</span>
+			} else {
+				<span class="badge badge-error">Inactive</span>
+			}
+		</td>
+		<td class="text-muted">
+			if user.LastLoginAt != nil {
+				{ user.LastLoginAt.Format("2006-01-02 15:04") }
+			} else {
+				Never
+			}
+		</td>
+		<td class="flex gap-2">
+			<a href={ templ.SafeURL("/admin/users/" + user.ID.String()) } class="btn btn-sm">Edit</a>
+			<button
+				class={ "btn btn-sm", templ.KV("btn-warning", user.IsActive), templ.KV("btn-success", !user.IsActive) }
+				hx-post={ "/admin/users/" + user.ID.String() + "/toggle-active" }
+				hx-target={ "#user-row-" + user.ID.String() }
+				hx-swap="outerHTML"
+				hx-headers={ fmt.Sprintf(`{"X-CSRF-Token": "%s"}`, csrfToken) }
+			>
+				if user.IsActive {
+					Deactivate
+				} else {
+					Activate
+				}
+			</button>
+		</td>
+	</tr>
+}
+
+templ UserFormPage(data UserFormData) {
+	if data.IsEdit {
+		@layouts.AdminLayout("Edit User", "/admin/users") {
+			@userFormContent(data)
+		}
+	} else {
+		@layouts.AdminLayout("New User", "/admin/users") {
+			@userFormContent(data)
+		}
+	}
+}
+
+templ userFormContent(data UserFormData) {
+	<div class="page-header">
+		if data.IsEdit {
+			<h2>Edit: { data.User.Name }</h2>
+		} else {
+			<h2>New User</h2>
+		}
+	</div>
+	if data.Error != "" {
+		<div class="alert alert-error mb-2">{ data.Error }</div>
+	}
+	<div class="card">
+		<form
+			method="POST"
+			if data.IsEdit {
+				action={ templ.SafeURL("/admin/users/" + data.User.ID.String()) }
+			} else {
+				action="/admin/users"
+			}
+		>
+			<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+			<div class="card-body">
+				<div class="form-grid">
+					<div class="form-group">
+						<label for="name">Name</label>
+						if data.IsEdit {
+							<input type="text" id="name" name="name" value={ data.User.Name } required/>
+						} else {
+							<input type="text" id="name" name="name" value="" required/>
+						}
+					</div>
+					<div class="form-group">
+						<label for="email">Email</label>
+						if data.IsEdit {
+							<input type="email" id="email" name="email" value={ data.User.Email } readonly/>
+						} else {
+							<input type="email" id="email" name="email" value="" required/>
+						}
+					</div>
+					<div class="form-group">
+						<label for="password">Password</label>
+						if data.IsEdit {
+							<input type="password" id="password" name="password" placeholder="Leave blank to keep current" minlength="8"/>
+						} else {
+							<input type="password" id="password" name="password" required minlength="8"/>
+						}
+					</div>
+					<div class="form-group">
+						<label for="role">Role</label>
+						if data.IsEdit {
+							<select id="role" name="role">
+								<option value="admin" selected?={ data.User.Role == "admin" }>Admin</option>
+								<option value="super_admin" selected?={ data.User.Role == "super_admin" }>Super Admin</option>
+							</select>
+						} else {
+							<select id="role" name="role">
+								<option value="admin" selected>Admin</option>
+								<option value="super_admin">Super Admin</option>
+							</select>
+						}
+					</div>
+					if data.IsEdit {
+						<div class="form-group">
+							<label>
+								<input
+									type="checkbox"
+									name="is_active"
+									value="on"
+									checked?={ data.User.IsActive }
+								/>
+								Active
+							</label>
+						</div>
+					}
+				</div>
+			</div>
+			<div class="card-body" style="border-top: 1px solid var(--gray-200); display: flex; justify-content: flex-end; gap: 8px;">
+				<a href="/admin/users" class="btn">Cancel</a>
+				if data.IsEdit {
+					<button type="submit" class="btn btn-primary">Save Changes</button>
+				} else {
+					<button type="submit" class="btn btn-primary">Create User</button>
+				}
+			</div>
+		</form>
+	</div>
+}

@@ -13,6 +13,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countLowStockVariants = `-- name: CountLowStockVariants :one
+SELECT COUNT(*) FROM product_variants
+WHERE stock_quantity <= low_stock_threshold AND is_active = true
+`
+
+func (q *Queries) CountLowStockVariants(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countLowStockVariants)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createProductVariant = `-- name: CreateProductVariant :one
 INSERT INTO product_variants (
   id, product_id, sku, price, compare_at_price,
