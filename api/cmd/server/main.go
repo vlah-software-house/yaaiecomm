@@ -14,9 +14,11 @@ import (
 	"github.com/forgecommerce/api/internal/config"
 	"github.com/forgecommerce/api/internal/database"
 	adminhandlers "github.com/forgecommerce/api/internal/handlers/admin"
+	apihandlers "github.com/forgecommerce/api/internal/handlers/api"
 	"github.com/forgecommerce/api/internal/middleware"
 	"github.com/forgecommerce/api/internal/services/attribute"
 	"github.com/forgecommerce/api/internal/services/bom"
+	"github.com/forgecommerce/api/internal/services/cart"
 	"github.com/forgecommerce/api/internal/services/category"
 	"github.com/forgecommerce/api/internal/services/discount"
 	"github.com/forgecommerce/api/internal/services/order"
@@ -72,6 +74,11 @@ func main() {
 	orderSvc := order.NewService(pool, logger)
 	discountSvc := discount.NewService(pool, logger)
 	shippingSvc := shipping.NewService(pool, logger)
+	cartSvc := cart.NewService(pool, logger)
+
+	// Initialize public API handlers
+	publicHandler := apihandlers.NewPublicHandler(productSvc, categorySvc, variantSvc, pool, logger)
+	cartHandler := apihandlers.NewCartHandler(cartSvc, logger)
 
 	// Initialize admin handlers
 	adminHandler := adminhandlers.NewHandler(authService, logger)
@@ -146,9 +153,19 @@ func main() {
 		fmt.Fprintln(w, `{"status":"ok"}`)
 	})
 
+	// Register public API routes
+	publicHandler.RegisterRoutes(apiMux)
+	cartHandler.RegisterRoutes(apiMux)
+
+	// Apply API middleware stack (CORS for storefront, logging, recovery)
+	var apiChain http.Handler = apiMux
+	apiChain = middleware.CORS(cfg.BaseURL)(apiChain)
+	apiChain = middleware.Recover(logger)(apiChain)
+	apiChain = middleware.RequestLogger(logger)(apiChain)
+
 	apiServer := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
-		Handler:      apiMux,
+		Handler:      apiChain,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,

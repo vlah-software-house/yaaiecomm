@@ -60,6 +60,27 @@ type AttributeOptionBomModifier struct {
 	CreatedAt         time.Time      `json:"created_at"`
 }
 
+type Cart struct {
+	ID          uuid.UUID   `json:"id"`
+	CustomerID  pgtype.UUID `json:"customer_id"`
+	Email       *string     `json:"email"`
+	CountryCode *string     `json:"country_code"`
+	VatNumber   *string     `json:"vat_number"`
+	CouponCode  *string     `json:"coupon_code"`
+	ExpiresAt   time.Time   `json:"expires_at"`
+	CreatedAt   time.Time   `json:"created_at"`
+	UpdatedAt   time.Time   `json:"updated_at"`
+}
+
+type CartItem struct {
+	ID        uuid.UUID `json:"id"`
+	CartID    uuid.UUID `json:"cart_id"`
+	VariantID uuid.UUID `json:"variant_id"`
+	Quantity  int32     `json:"quantity"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 type Category struct {
 	ID             uuid.UUID   `json:"id"`
 	Name           string      `json:"name"`
