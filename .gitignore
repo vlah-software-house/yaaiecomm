@@ -23,8 +23,8 @@ storefront/dist/
 .DS_Store
 Thumbs.db
 
-# Media uploads
-media/
+# Media uploads (root-level only, not api/internal/services/media/)
+/media/
 
 # Test results
 test-results/

@@ -1,0 +1,212 @@
+package admin
+
+import (
+	"fmt"
+	"github.com/forgecommerce/api/templates/layouts"
+)
+
+type ProductImagesData struct {
+	ProductID string
+	Images    []ProductImageItem
+	Variants  []ImageVariantItem
+	CSRFToken string
+	Error     string
+	Success   string
+}
+
+type ProductImageItem struct {
+	ID        string
+	URL       string
+	AltText   string
+	Position  int
+	IsPrimary bool
+	VariantID string // empty string if not assigned
+}
+
+type ImageVariantItem struct {
+	ID  string
+	SKU string
+}
+
+templ ProductImagesPage(data ProductImagesData) {
+	@layouts.AdminLayout("Product Images", "/admin/products") {
+		<div class="page-header">
+			<h2>Product Images</h2>
+		</div>
+		@ProductTabs(data.ProductID, "images")
+		@ProductImagesGrid(data)
+	}
+}
+
+templ ProductImagesGrid(data ProductImagesData) {
+	<div id="image-management">
+		if data.Error != "" {
+			<div class="alert alert-error mb-2">{ data.Error }</div>
+		}
+		if data.Success != "" {
+			<div class="alert alert-success mb-2">{ data.Success }</div>
+		}
+		<!-- Upload Section -->
+		<div class="card mb-3">
+			<div class="card-header">
+				<span>Upload Images</span>
+			</div>
+			<div class="card-body">
+				<form
+					hx-post={ "/admin/products/" + data.ProductID + "/images/upload" }
+					hx-target="#image-management"
+					hx-swap="outerHTML"
+					hx-encoding="multipart/form-data"
+					style="display: flex; flex-direction: column; gap: 12px;"
+				>
+					<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+					<div
+						style="border: 2px dashed var(--gray-300); border-radius: 8px; padding: 24px; text-align: center; cursor: pointer; transition: border-color 0.2s;"
+						id="drop-zone"
+					>
+						<p style="margin: 0 0 8px 0; color: var(--gray-600);">
+							Drag and drop images here, or click to browse
+						</p>
+						<input
+							type="file"
+							name="images"
+							multiple
+							accept="image/jpeg,image/png,image/webp,image/gif"
+							style="display: block; margin: 0 auto;"
+						/>
+						<p style="margin: 8px 0 0 0; font-size: 0.8rem; color: var(--gray-400);">
+							Supported: JPEG, PNG, WebP, GIF. Max 10MB per file.
+						</p>
+					</div>
+					<button type="submit" class="btn btn-primary btn-sm" style="align-self: flex-start;">
+						Upload
+					</button>
+				</form>
+			</div>
+		</div>
+		<!-- Image Grid -->
+		<div class="card">
+			<div class="card-header flex justify-between items-center">
+				<span>Images ({ fmt.Sprintf("%d", len(data.Images)) })</span>
+				if len(data.Images) > 1 {
+					<span style="font-size: 0.8rem; color: var(--gray-500);">Drag to reorder</span>
+				}
+			</div>
+			<div class="card-body">
+				if len(data.Images) == 0 {
+					<div style="text-align: center; padding: 40px; color: var(--gray-500);">
+						<p>No images uploaded yet.</p>
+						<p style="font-size: 0.875rem;">Upload images above to get started.</p>
+					</div>
+				} else {
+					<div
+						id="image-grid"
+						style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px;"
+					>
+						for _, img := range data.Images {
+							@ProductImageCard(data.ProductID, img, data.Variants, data.CSRFToken)
+						}
+					</div>
+					<!-- Hidden form for reorder submissions -->
+					<form
+						id="reorder-form"
+						hx-post={ "/admin/products/" + data.ProductID + "/images/reorder" }
+						hx-target="#image-management"
+						hx-swap="outerHTML"
+						style="display: none;"
+					>
+						<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+						<input type="hidden" name="order" id="reorder-input" value=""/>
+					</form>
+				}
+			</div>
+		</div>
+	</div>
+}
+
+templ ProductImageCard(productID string, img ProductImageItem, variants []ImageVariantItem, csrfToken string) {
+	<div
+		class="image-card"
+		data-image-id={ img.ID }
+		style="border: 1px solid var(--gray-200); border-radius: 8px; overflow: hidden; position: relative; background: var(--gray-50);"
+	>
+		<!-- Primary Badge -->
+		if img.IsPrimary {
+			<div
+				style="position: absolute; top: 8px; left: 8px; background: var(--primary); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; z-index: 1;"
+			>
+				PRIMARY
+			</div>
+		}
+		<!-- Image Thumbnail -->
+		<div style="aspect-ratio: 1; overflow: hidden; background: white; display: flex; align-items: center; justify-content: center;">
+			<img
+				src={ img.URL }
+				alt={ img.AltText }
+				style="max-width: 100%; max-height: 100%; object-fit: contain;"
+				loading="lazy"
+			/>
+		</div>
+		<!-- Image Actions -->
+		<div style="padding: 8px; display: flex; flex-direction: column; gap: 6px;">
+			<!-- Alt Text -->
+			<div style="display: flex; gap: 4px; align-items: center;">
+				<input
+					type="text"
+					name="alt_text"
+					value={ img.AltText }
+					placeholder="Alt text"
+					style="flex: 1; padding: 4px 6px; font-size: 0.8rem; border: 1px solid var(--gray-200); border-radius: 4px;"
+					hx-post={ "/admin/products/" + productID + "/images/" + img.ID + "/alt" }
+					hx-trigger="change"
+					hx-vals={ fmt.Sprintf("{\"csrf_token\":\"%s\"}", csrfToken) }
+					hx-swap="none"
+				/>
+			</div>
+			<!-- Variant Assignment -->
+			if len(variants) > 0 {
+				<select
+					name="variant_id"
+					style="padding: 4px 6px; font-size: 0.8rem; border: 1px solid var(--gray-200); border-radius: 4px;"
+					hx-post={ "/admin/products/" + productID + "/images/" + img.ID + "/assign" }
+					hx-target="#image-management"
+					hx-swap="outerHTML"
+					hx-vals={ fmt.Sprintf("{\"csrf_token\":\"%s\"}", csrfToken) }
+				>
+					<option value="" selected?={ img.VariantID == "" }>No variant</option>
+					for _, v := range variants {
+						<option value={ v.ID } selected?={ img.VariantID == v.ID }>{ v.SKU }</option>
+					}
+				</select>
+			}
+			<!-- Action Buttons -->
+			<div style="display: flex; gap: 4px; justify-content: space-between;">
+				if !img.IsPrimary {
+					<button
+						class="btn btn-sm"
+						style="font-size: 0.75rem; padding: 3px 8px;"
+						hx-post={ "/admin/products/" + productID + "/images/" + img.ID + "/primary" }
+						hx-target="#image-management"
+						hx-swap="outerHTML"
+						hx-vals={ fmt.Sprintf("{\"csrf_token\":\"%s\"}", csrfToken) }
+					>
+						Set Primary
+					</button>
+				} else {
+					<span style="font-size: 0.75rem; color: var(--primary); padding: 3px 0; font-weight: 500;">Primary</span>
+				}
+				<button
+					class="btn btn-sm btn-danger"
+					style="font-size: 0.75rem; padding: 3px 8px;"
+					hx-post={ "/admin/products/" + productID + "/images/" + img.ID + "/delete" }
+					hx-target="#image-management"
+					hx-swap="outerHTML"
+					hx-vals={ fmt.Sprintf("{\"csrf_token\":\"%s\"}", csrfToken) }
+					hx-confirm="Delete this image?"
+				>
+					Delete
+				</button>
+			</div>
+		</div>
+	</div>
+}

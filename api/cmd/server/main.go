@@ -23,6 +23,7 @@ import (
 	"github.com/forgecommerce/api/internal/services/category"
 	"github.com/forgecommerce/api/internal/services/customer"
 	"github.com/forgecommerce/api/internal/services/discount"
+	"github.com/forgecommerce/api/internal/services/media"
 	"github.com/forgecommerce/api/internal/services/order"
 	"github.com/forgecommerce/api/internal/services/production"
 	"github.com/forgecommerce/api/internal/services/product"
@@ -90,6 +91,7 @@ func main() {
 	cartSvc := cart.NewService(pool, logger)
 	reportSvc := report.NewService(pool, logger)
 	productionSvc := production.NewService(pool, logger)
+	mediaSvc := media.NewService(pool, cfg.MediaPath, logger)
 	webhookSvc := webhook.NewService(pool, logger)
 
 	// Initialize public API handlers
@@ -122,6 +124,7 @@ func main() {
 	userHandler := adminhandlers.NewUserHandler(authService, logger)
 	reportHandler := adminhandlers.NewReportHandler(reportSvc, logger)
 	productionHandler := adminhandlers.NewProductionHandler(productionSvc, productSvc, logger)
+	imageHandler := adminhandlers.NewImageHandler(mediaSvc, variantSvc, logger)
 	adminWebhookHandler := adminhandlers.NewWebhookHandler(webhookSvc, logger)
 	csvioHandler := adminhandlers.NewCSVIOHandler(productSvc, rawMaterialSvc, orderSvc, logger)
 
@@ -158,9 +161,13 @@ func main() {
 	userHandler.RegisterRoutes(protectedMux)
 	reportHandler.RegisterRoutes(protectedMux)
 	productionHandler.RegisterRoutes(protectedMux)
+	imageHandler.RegisterRoutes(protectedMux)
 	adminWebhookHandler.RegisterRoutes(protectedMux)
 	csvioHandler.RegisterRoutes(protectedMux)
 	adminMux.Handle("/admin/", middleware.RequireAuth(authService)(protectedMux))
+
+	// Media file server (uploaded product images)
+	adminMux.Handle("GET /media/", http.StripPrefix("/media/", http.FileServer(http.Dir(cfg.MediaPath))))
 
 	// Root redirect
 	adminMux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
@@ -171,6 +178,7 @@ func main() {
 	var adminChain http.Handler = adminMux
 	adminChain = middleware.CSRF(adminChain)
 	adminChain = middleware.SecurityHeaders(adminChain)
+	adminChain = middleware.LoginRateLimiter()(adminChain) // Brute-force protection on admin login
 	adminChain = middleware.Recover(logger)(adminChain)
 	adminChain = middleware.RequestLogger(logger)(adminChain)
 
@@ -190,6 +198,9 @@ func main() {
 		fmt.Fprintln(w, `{"status":"ok"}`)
 	})
 
+	// Media file server (uploaded product images, accessible by storefront)
+	apiMux.Handle("GET /media/", http.StripPrefix("/media/", http.FileServer(http.Dir(cfg.MediaPath))))
+
 	// Register public API routes (no auth required)
 	publicHandler.RegisterRoutes(apiMux)
 	cartHandler.RegisterRoutes(apiMux)
@@ -204,9 +215,10 @@ func main() {
 	apiMux.Handle("/api/v1/customers/me", middleware.RequireCustomerAuth(jwtMgr)(customerProtectedMux))
 	apiMux.Handle("/api/v1/customers/me/", middleware.RequireCustomerAuth(jwtMgr)(customerProtectedMux))
 
-	// Apply API middleware stack (CORS for storefront, logging, recovery)
+	// Apply API middleware stack (CORS for storefront, rate limiting, logging, recovery)
 	var apiChain http.Handler = apiMux
 	apiChain = middleware.CORS(cfg.BaseURL)(apiChain)
+	apiChain = middleware.RateLimiter(20, 40)(apiChain) // 20 req/s, burst 40 per IP
 	apiChain = middleware.Recover(logger)(apiChain)
 	apiChain = middleware.RequestLogger(logger)(apiChain)
 
