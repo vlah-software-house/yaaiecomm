@@ -143,8 +143,13 @@ func main() {
 	// Static files
 	adminMux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
-	// Public admin routes (login, 2FA)
-	adminHandler.RegisterRoutes(adminMux)
+	// Public admin routes (login, 2FA) — wrapped with brute-force rate limiting
+	loginMux := http.NewServeMux()
+	adminHandler.RegisterRoutes(loginMux)
+	adminMux.Handle("/admin/login", middleware.LoginRateLimiter()(loginMux))
+	adminMux.Handle("/admin/login/", middleware.LoginRateLimiter()(loginMux))
+	adminMux.Handle("/admin/setup-2fa", loginMux)
+	adminMux.Handle("/admin/setup-2fa/", loginMux)
 
 	// Protected admin routes — wrap in auth middleware
 	protectedMux := http.NewServeMux()
@@ -182,7 +187,7 @@ func main() {
 	var adminChain http.Handler = adminMux
 	adminChain = middleware.CSRF(adminChain)
 	adminChain = middleware.SecurityHeaders(adminChain)
-	adminChain = middleware.LoginRateLimiter()(adminChain) // Brute-force protection on admin login
+	adminChain = middleware.RateLimiter(30, 60)(adminChain) // General admin rate limiting (30 req/s, burst 60)
 	adminChain = middleware.Recover(logger)(adminChain)
 	adminChain = middleware.RequestLogger(logger)(adminChain)
 

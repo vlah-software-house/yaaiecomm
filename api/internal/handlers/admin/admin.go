@@ -42,7 +42,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 // RegisterProtectedRoutes registers routes that require authentication.
 // These should be wrapped with RequireAuth middleware by the caller.
 func (h *Handler) RegisterProtectedRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /admin/dashboard", h.ShowDashboard)
+	// NOTE: GET /admin/dashboard is registered by DashboardHandler.RegisterRoutes
 	mux.HandleFunc("POST /admin/logout", h.HandleLogout)
 }
 
@@ -95,10 +95,10 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// No 2FA — create session directly (shouldn't happen with force_2fa_setup)
+	// No 2FA — create session directly (user has not set up 2FA yet)
 	ip := r.RemoteAddr
 	ua := r.UserAgent()
-	sessionToken, err := h.auth.CompleteTwoFactor(r.Context(), user.ID, "", ip, ua)
+	sessionToken, err := h.auth.CreateSessionDirect(r.Context(), user.ID, ip, ua)
 	if err != nil {
 		h.logger.Error("failed to create session", "error", err)
 		admin.LoginPage("Internal error. Please try again.", csrfToken).Render(r.Context(), w)

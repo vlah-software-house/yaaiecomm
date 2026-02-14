@@ -145,6 +145,29 @@ func (s *Service) CompleteTwoFactor(ctx context.Context, userID uuid.UUID, code,
 	return token, nil
 }
 
+// CreateSessionDirect creates an admin session directly without 2FA validation.
+// Used for users who have not yet set up 2FA (force_2fa_setup=false, totp_verified=false).
+func (s *Service) CreateSessionDirect(ctx context.Context, userID uuid.UUID, ipAddress, userAgent string) (string, error) {
+	token, err := s.session.CreateSession(ctx, userID, ipAddress, userAgent)
+	if err != nil {
+		return "", fmt.Errorf("creating direct session: %w", err)
+	}
+
+	if err := s.UpdateLastLogin(ctx, userID); err != nil {
+		s.logger.Error("failed to update last login",
+			slog.String("user_id", userID.String()),
+			slog.String("error", err.Error()),
+		)
+	}
+
+	s.logger.Info("admin login (direct, no 2FA)",
+		slog.String("user_id", userID.String()),
+		slog.String("ip", ipAddress),
+	)
+
+	return token, nil
+}
+
 // Setup2FA generates a new TOTP secret for a user who hasn't set up 2FA yet.
 // Returns the TOTP setup containing the secret, OTP URL, and QR code PNG bytes.
 func (s *Service) Setup2FA(ctx context.Context, userID uuid.UUID) (*TOTPSetup, error) {
