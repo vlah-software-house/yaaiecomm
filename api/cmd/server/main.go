@@ -23,6 +23,7 @@ import (
 	"github.com/forgecommerce/api/internal/services/category"
 	"github.com/forgecommerce/api/internal/services/customer"
 	"github.com/forgecommerce/api/internal/services/discount"
+	"github.com/forgecommerce/api/internal/services/globalattr"
 	"github.com/forgecommerce/api/internal/services/media"
 	"github.com/forgecommerce/api/internal/services/order"
 	"github.com/forgecommerce/api/internal/services/production"
@@ -93,6 +94,7 @@ func main() {
 	productionSvc := production.NewService(pool, logger)
 	mediaSvc := media.NewService(pool, cfg.MediaPath, logger)
 	webhookSvc := webhook.NewService(pool, logger)
+	globalAttrSvc := globalattr.NewService(pool, logger)
 
 	// Initialize public API handlers
 	queries := db.New(pool)
@@ -127,6 +129,7 @@ func main() {
 	imageHandler := adminhandlers.NewImageHandler(mediaSvc, variantSvc, logger)
 	adminWebhookHandler := adminhandlers.NewWebhookHandler(webhookSvc, logger)
 	csvioHandler := adminhandlers.NewCSVIOHandler(productSvc, rawMaterialSvc, orderSvc, logger)
+	globalAttrHandler := adminhandlers.NewGlobalAttributeHandler(globalAttrSvc, productSvc, logger)
 
 	// Admin server (HTMX + templ)
 	adminMux := http.NewServeMux()
@@ -164,6 +167,7 @@ func main() {
 	imageHandler.RegisterRoutes(protectedMux)
 	adminWebhookHandler.RegisterRoutes(protectedMux)
 	csvioHandler.RegisterRoutes(protectedMux)
+	globalAttrHandler.RegisterRoutes(protectedMux)
 	adminMux.Handle("/admin/", middleware.RequireAuth(authService)(protectedMux))
 
 	// Media file server (uploaded product images)

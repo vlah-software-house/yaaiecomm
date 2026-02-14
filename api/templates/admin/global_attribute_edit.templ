@@ -1,0 +1,421 @@
+package admin
+
+import (
+	"fmt"
+	"strings"
+	"github.com/forgecommerce/api/templates/layouts"
+)
+
+// --- Data types for global attribute edit ---
+
+type GlobalAttributeEditData struct {
+	ID            string
+	Name          string
+	DisplayName   string
+	Description   string
+	AttributeType string
+	Category      string
+	IsActive      bool
+	IsNew         bool
+	Fields        []MetadataFieldItem
+	Options       []GlobalOptionItem
+	CSRFToken     string
+	Error         string
+	Success       string
+}
+
+type MetadataFieldItem struct {
+	ID            string
+	FieldName     string
+	DisplayName   string
+	FieldType     string
+	IsRequired    bool
+	DefaultValue  string
+	SelectOptions []string
+	HelpText      string
+	Position      int
+}
+
+type GlobalOptionItem struct {
+	ID           string
+	Value        string
+	DisplayValue string
+	ColorHex     string
+	ImageURL     string
+	Metadata     map[string]string // field_name -> value
+	Position     int
+	IsActive     bool
+}
+
+func metadataFieldTypeLabel(ft string) string {
+	switch ft {
+	case "text":
+		return "Text"
+	case "number":
+		return "Number"
+	case "boolean":
+		return "Boolean"
+	case "select":
+		return "Select"
+	case "url":
+		return "URL"
+	default:
+		return ft
+	}
+}
+
+templ GlobalAttributeEditPage(data GlobalAttributeEditData) {
+	@layouts.AdminLayout("Global Attribute", "/admin/global-attributes") {
+		<div class="page-header">
+			if data.IsNew {
+				<h2>New Global Attribute</h2>
+			} else {
+				<h2>Edit: { data.DisplayName }</h2>
+			}
+		</div>
+		if data.Error != "" {
+			<div class="alert alert-error mb-2">{ data.Error }</div>
+		}
+		if data.Success != "" {
+			<div class="alert alert-success mb-2">{ data.Success }</div>
+		}
+		<!-- Basic Info Form -->
+		<div class="card mb-3">
+			<div class="card-header">Attribute Details</div>
+			<form
+				method="POST"
+				if data.IsNew {
+					action="/admin/global-attributes"
+				} else {
+					action={ templ.SafeURL("/admin/global-attributes/" + data.ID) }
+				}
+			>
+				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+				<div class="card-body">
+					<div class="form-grid">
+						<div class="form-group">
+							<label for="ga_name">Name (internal)</label>
+							<input type="text" id="ga_name" name="name" value={ data.Name } placeholder="e.g. color, material, finish" required/>
+							<small class="text-muted">Lowercase, snake_case. Used for lookups.</small>
+						</div>
+						<div class="form-group">
+							<label for="ga_display_name">Display Name</label>
+							<input type="text" id="ga_display_name" name="display_name" value={ data.DisplayName } placeholder="e.g. Color, Material, Finish"/>
+						</div>
+						<div class="form-group">
+							<label for="ga_type">Attribute Type</label>
+							<select id="ga_type" name="attribute_type" required>
+								<option value="select" selected?={ data.AttributeType == "select" || data.AttributeType == "" }>Select</option>
+								<option value="color_swatch" selected?={ data.AttributeType == "color_swatch" }>Color Swatch</option>
+								<option value="button_group" selected?={ data.AttributeType == "button_group" }>Button Group</option>
+								<option value="image_swatch" selected?={ data.AttributeType == "image_swatch" }>Image Swatch</option>
+							</select>
+						</div>
+						<div class="form-group">
+							<label for="ga_category">Category</label>
+							<select id="ga_category" name="category">
+								<option value="" selected?={ data.Category == "" }>No category</option>
+								<option value="physical" selected?={ data.Category == "physical" }>Physical</option>
+								<option value="material" selected?={ data.Category == "material" }>Material</option>
+								<option value="style" selected?={ data.Category == "style" }>Style</option>
+								<option value="technical" selected?={ data.Category == "technical" }>Technical</option>
+								<option value="other" selected?={ data.Category == "other" }>Other</option>
+							</select>
+						</div>
+						<div class="form-group" style="grid-column: 1 / -1;">
+							<label for="ga_description">Description</label>
+							<textarea id="ga_description" name="description" rows="3" placeholder="What is this attribute used for?">{ data.Description }</textarea>
+						</div>
+						<div class="form-group">
+							<label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+								<input type="checkbox" name="is_active" value="true" checked?={ data.IsActive || data.IsNew }/>
+								Active
+							</label>
+						</div>
+					</div>
+				</div>
+				<div class="card-body" style="border-top: 1px solid var(--gray-200); display: flex; justify-content: flex-end; gap: 8px;">
+					<a href="/admin/global-attributes" class="btn">Cancel</a>
+					if data.IsNew {
+						<button type="submit" class="btn btn-primary">Create Attribute</button>
+					} else {
+						<button type="submit" class="btn btn-primary">Save Changes</button>
+					}
+				</div>
+			</form>
+		</div>
+		if !data.IsNew {
+			<!-- Metadata Fields Section -->
+			<div class="card mb-3">
+				<div class="card-header">
+					<span>Metadata Fields</span>
+				</div>
+				<div class="card-body">
+					<p class="text-muted" style="margin-bottom: 12px;">
+						Define extra fields that each option can carry (e.g., Pantone code, hex value, material weight).
+					</p>
+					<div class="table-container">
+						<table>
+							<thead>
+								<tr>
+									<th>Field Name</th>
+									<th>Display Name</th>
+									<th>Type</th>
+									<th>Required</th>
+									<th>Default</th>
+									<th>Actions</th>
+								</tr>
+							</thead>
+							<tbody id={ "fields-" + data.ID }>
+								if len(data.Fields) == 0 {
+									<tr id={ "no-fields-" + data.ID }>
+										<td colspan="6" class="text-center text-muted" style="padding: 24px;">
+											No metadata fields defined. Add fields below.
+										</td>
+									</tr>
+								}
+								for _, field := range data.Fields {
+									@MetadataFieldRow(data.ID, field, data.CSRFToken)
+								}
+							</tbody>
+						</table>
+					</div>
+				</div>
+				<!-- Add Metadata Field Form -->
+				<div class="card-body" style="border-top: 1px solid var(--gray-200);">
+					<form
+						hx-post={ "/admin/global-attributes/" + data.ID + "/fields" }
+						hx-target={ "#fields-" + data.ID }
+						hx-swap="beforeend"
+						data-attr-id={ data.ID }
+						hx-on::after-request="if(event.detail.successful) { this.reset(); var noRow = document.getElementById('no-fields-' + this.dataset.attrId); if(noRow) noRow.remove(); }"
+					>
+						<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+						<div style="display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap;">
+							<div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 120px;">
+								<label>Field Name</label>
+								<input type="text" name="field_name" placeholder="e.g. pantone_code" required/>
+							</div>
+							<div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 120px;">
+								<label>Display Name</label>
+								<input type="text" name="display_name" placeholder="e.g. Pantone Code"/>
+							</div>
+							<div class="form-group" style="margin-bottom: 0; min-width: 120px;">
+								<label>Type</label>
+								<select name="field_type" required>
+									<option value="text">Text</option>
+									<option value="number">Number</option>
+									<option value="boolean">Boolean</option>
+									<option value="select">Select</option>
+									<option value="url">URL</option>
+								</select>
+							</div>
+							<div class="form-group" style="margin-bottom: 0; min-width: 100px;">
+								<label>Default Value</label>
+								<input type="text" name="default_value" placeholder="optional"/>
+							</div>
+							<div class="form-group" style="margin-bottom: 0;">
+								<label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+									<input type="checkbox" name="is_required" value="true"/>
+									Required
+								</label>
+							</div>
+							<div style="margin-bottom: 0;">
+								<button type="submit" class="btn btn-primary btn-sm">Add Field</button>
+							</div>
+						</div>
+					</form>
+				</div>
+			</div>
+			<!-- Options Section -->
+			<div class="card mb-3">
+				<div class="card-header">
+					<span>Options ({ fmt.Sprintf("%d", len(data.Options)) })</span>
+				</div>
+				<div class="card-body">
+					<div class="table-container">
+						<table>
+							<thead>
+								<tr>
+									<th>Value</th>
+									<th>Display Value</th>
+									<th>Color</th>
+									for _, f := range data.Fields {
+										<th>{ f.DisplayName }</th>
+									}
+									<th>Active</th>
+									<th>Actions</th>
+								</tr>
+							</thead>
+							<tbody id={ "options-" + data.ID }>
+								if len(data.Options) == 0 {
+									<tr id={ "no-options-" + data.ID }>
+										<td colspan={ fmt.Sprintf("%d", 5+len(data.Fields)) } class="text-center text-muted" style="padding: 24px;">
+											No options defined. Add options below.
+										</td>
+									</tr>
+								}
+								for _, opt := range data.Options {
+									@GlobalOptionRow(data.ID, opt, data.Fields, data.CSRFToken)
+								}
+							</tbody>
+						</table>
+					</div>
+				</div>
+				<!-- Add Option Form -->
+				<div class="card-body" style="border-top: 1px solid var(--gray-200);">
+					<form
+						hx-post={ "/admin/global-attributes/" + data.ID + "/options" }
+						hx-target={ "#options-" + data.ID }
+						hx-swap="beforeend"
+						data-attr-id={ data.ID }
+						hx-on::after-request="if(event.detail.successful) { this.reset(); var noRow = document.getElementById('no-options-' + this.dataset.attrId); if(noRow) noRow.remove(); }"
+					>
+						<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+						<div style="display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap;">
+							<div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 120px;">
+								<label>Value</label>
+								<input type="text" name="value" placeholder="e.g. black" required/>
+							</div>
+							<div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 120px;">
+								<label>Display Value</label>
+								<input type="text" name="display_value" placeholder="e.g. Black"/>
+							</div>
+							<div class="form-group" style="margin-bottom: 0; min-width: 80px;">
+								<label>Color Hex</label>
+								<input type="text" name="color_hex" placeholder="#000000"/>
+							</div>
+							for _, f := range data.Fields {
+								<div class="form-group" style="margin-bottom: 0; min-width: 100px;">
+									<label>{ f.DisplayName }</label>
+									if f.FieldType == "boolean" {
+										<select name={ "meta_" + f.FieldName }>
+											<option value="">--</option>
+											<option value="true">Yes</option>
+											<option value="false">No</option>
+										</select>
+									} else if f.FieldType == "select" && len(f.SelectOptions) > 0 {
+										<select name={ "meta_" + f.FieldName }>
+											<option value="">--</option>
+											for _, so := range f.SelectOptions {
+												<option value={ so }>{ so }</option>
+											}
+										</select>
+									} else if f.FieldType == "number" {
+										<input type="number" name={ "meta_" + f.FieldName } placeholder={ f.DefaultValue } step="any"/>
+									} else if f.FieldType == "url" {
+										<input type="url" name={ "meta_" + f.FieldName } placeholder={ f.DefaultValue }/>
+									} else {
+										<input type="text" name={ "meta_" + f.FieldName } placeholder={ f.DefaultValue }/>
+									}
+								</div>
+							}
+							<div style="margin-bottom: 0;">
+								<button type="submit" class="btn btn-primary btn-sm">Add Option</button>
+							</div>
+						</div>
+					</form>
+				</div>
+			</div>
+		}
+	}
+}
+
+templ MetadataFieldRow(attrID string, field MetadataFieldItem, csrfToken string) {
+	<tr id={ "field-" + field.ID }>
+		<td><code>{ field.FieldName }</code></td>
+		<td>{ field.DisplayName }</td>
+		<td>
+			<span class="badge badge-muted">{ metadataFieldTypeLabel(field.FieldType) }</span>
+		</td>
+		<td>
+			if field.IsRequired {
+				<span class="badge badge-warning">Required</span>
+			} else {
+				<span class="text-muted">Optional</span>
+			}
+		</td>
+		<td>
+			if field.DefaultValue != "" {
+				{ field.DefaultValue }
+			} else {
+				<span class="text-muted">&mdash;</span>
+			}
+		</td>
+		<td>
+			<button
+				class="btn btn-sm btn-danger"
+				hx-post={ "/admin/global-attributes/" + attrID + "/fields/" + field.ID + "/delete" }
+				hx-target={ "#field-" + field.ID }
+				hx-swap="outerHTML"
+				hx-vals={ "{\"csrf_token\":\"" + csrfToken + "\"}" }
+				hx-confirm={ fmt.Sprintf("Delete field \"%s\"? Existing option metadata for this field will be lost.", field.DisplayName) }
+			>
+				Remove
+			</button>
+		</td>
+	</tr>
+}
+
+templ GlobalOptionRow(attrID string, opt GlobalOptionItem, fields []MetadataFieldItem, csrfToken string) {
+	<tr id={ "option-" + opt.ID }>
+		<td>{ opt.Value }</td>
+		<td>
+			if opt.DisplayValue != "" {
+				{ opt.DisplayValue }
+			} else {
+				<span class="text-muted">&mdash;</span>
+			}
+		</td>
+		<td>
+			if opt.ColorHex != "" {
+				<span style="display: inline-flex; align-items: center; gap: 4px;">
+					<span style={ fmt.Sprintf("display: inline-block; width: 16px; height: 16px; border-radius: 3px; border: 1px solid var(--gray-300); background-color: %s;", opt.ColorHex) }></span>
+					<span class="text-muted" style="font-size: 0.875rem;">{ opt.ColorHex }</span>
+				</span>
+			} else {
+				<span class="text-muted">&mdash;</span>
+			}
+		</td>
+		for _, f := range fields {
+			<td>
+				if v, ok := opt.Metadata[f.FieldName]; ok && v != "" {
+					if f.FieldType == "url" {
+						<a href={ templ.SafeURL(v) } target="_blank" class="text-muted" style="font-size: 0.85rem;">{ truncateStr(v, 30) }</a>
+					} else {
+						{ v }
+					}
+				} else {
+					<span class="text-muted">&mdash;</span>
+				}
+			</td>
+		}
+		<td>
+			if opt.IsActive {
+				<span class="badge badge-success">Active</span>
+			} else {
+				<span class="badge badge-muted">Inactive</span>
+			}
+		</td>
+		<td>
+			<button
+				class="btn btn-sm btn-danger"
+				hx-post={ "/admin/global-attributes/" + attrID + "/options/" + opt.ID + "/delete" }
+				hx-target={ "#option-" + opt.ID }
+				hx-swap="outerHTML"
+				hx-vals={ "{\"csrf_token\":\"" + csrfToken + "\"}" }
+				hx-confirm={ fmt.Sprintf("Delete option \"%s\"?", opt.Value) }
+			>
+				Remove
+			</button>
+		</td>
+	</tr>
+}
+
+// truncateStr truncates a string to maxLen characters, adding "..." if truncated.
+func truncateStr(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return strings.TrimSpace(s[:maxLen]) + "..."
+}

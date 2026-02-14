@@ -153,6 +153,11 @@ templ ProductTabs(productID string, activeTab string) {
 			style="padding: 8px 16px; text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -2px; color: var(--gray-600);"
 		>Variants</a>
 		<a
+			href={ templ.SafeURL("/admin/products/" + productID + "/global-attributes") }
+			class={ "tab-link", templ.KV("tab-active", activeTab == "global-attributes") }
+			style="padding: 8px 16px; text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -2px; color: var(--gray-600);"
+		>Global Attributes</a>
+		<a
 			href={ templ.SafeURL("/admin/products/" + productID + "/bom") }
 			class={ "tab-link", templ.KV("tab-active", activeTab == "bom") }
 			style="padding: 8px 16px; text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -2px; color: var(--gray-600);"

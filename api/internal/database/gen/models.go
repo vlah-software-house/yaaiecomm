@@ -230,6 +230,47 @@ type EuCountry struct {
 	Currency             string `json:"currency"`
 }
 
+type GlobalAttribute struct {
+	ID            uuid.UUID `json:"id"`
+	Name          string    `json:"name"`
+	DisplayName   string    `json:"display_name"`
+	Description   *string   `json:"description"`
+	AttributeType string    `json:"attribute_type"`
+	Category      *string   `json:"category"`
+	Position      int32     `json:"position"`
+	IsActive      bool      `json:"is_active"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+type GlobalAttributeMetadataField struct {
+	ID                uuid.UUID `json:"id"`
+	GlobalAttributeID uuid.UUID `json:"global_attribute_id"`
+	FieldName         string    `json:"field_name"`
+	DisplayName       string    `json:"display_name"`
+	FieldType         string    `json:"field_type"`
+	IsRequired        bool      `json:"is_required"`
+	DefaultValue      *string   `json:"default_value"`
+	SelectOptions     []string  `json:"select_options"`
+	HelpText          *string   `json:"help_text"`
+	Position          int32     `json:"position"`
+	CreatedAt         time.Time `json:"created_at"`
+}
+
+type GlobalAttributeOption struct {
+	ID                uuid.UUID       `json:"id"`
+	GlobalAttributeID uuid.UUID       `json:"global_attribute_id"`
+	Value             string          `json:"value"`
+	DisplayValue      string          `json:"display_value"`
+	ColorHex          *string         `json:"color_hex"`
+	ImageUrl          *string         `json:"image_url"`
+	Metadata          json.RawMessage `json:"metadata"`
+	Position          int32           `json:"position"`
+	IsActive          bool            `json:"is_active"`
+	CreatedAt         time.Time       `json:"created_at"`
+	UpdatedAt         time.Time       `json:"updated_at"`
+}
+
 type MediaAsset struct {
 	ID               uuid.UUID       `json:"id"`
 	Filename         string          `json:"filename"`
@@ -379,6 +420,29 @@ type ProductCategory struct {
 	Position   int32     `json:"position"`
 }
 
+type ProductGlobalAttributeLink struct {
+	ID                  uuid.UUID `json:"id"`
+	ProductID           uuid.UUID `json:"product_id"`
+	GlobalAttributeID   uuid.UUID `json:"global_attribute_id"`
+	RoleName            string    `json:"role_name"`
+	RoleDisplayName     string    `json:"role_display_name"`
+	Position            int32     `json:"position"`
+	AffectsPricing      bool      `json:"affects_pricing"`
+	AffectsShipping     bool      `json:"affects_shipping"`
+	PriceModifierField  *string   `json:"price_modifier_field"`
+	WeightModifierField *string   `json:"weight_modifier_field"`
+	CreatedAt           time.Time `json:"created_at"`
+}
+
+type ProductGlobalOptionSelection struct {
+	ID                  uuid.UUID      `json:"id"`
+	LinkID              uuid.UUID      `json:"link_id"`
+	GlobalOptionID      uuid.UUID      `json:"global_option_id"`
+	PriceModifier       pgtype.Numeric `json:"price_modifier"`
+	WeightModifierGrams *int32         `json:"weight_modifier_grams"`
+	PositionOverride    *int32         `json:"position_override"`
+}
+
 type ProductImage struct {
 	ID        uuid.UUID   `json:"id"`
 	ProductID uuid.UUID   `json:"product_id"`
@@ -406,6 +470,12 @@ type ProductVariant struct {
 	Position          int32          `json:"position"`
 	CreatedAt         time.Time      `json:"created_at"`
 	UpdatedAt         time.Time      `json:"updated_at"`
+}
+
+type ProductVariantGlobalOption struct {
+	VariantID      uuid.UUID `json:"variant_id"`
+	LinkID         uuid.UUID `json:"link_id"`
+	GlobalOptionID uuid.UUID `json:"global_option_id"`
 }
 
 type ProductVariantOption struct {

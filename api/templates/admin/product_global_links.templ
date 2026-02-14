@@ -1,0 +1,261 @@
+package admin
+
+import (
+	"fmt"
+	"github.com/forgecommerce/api/templates/layouts"
+)
+
+// --- Data types for product global attribute links ---
+
+type ProductGlobalLinksData struct {
+	ProductID      string
+	ProductName    string
+	Links          []ProductGlobalLinkItem
+	AvailableAttrs []GlobalAttributeListItem // for "link" dropdown
+	CSRFToken      string
+	Error          string
+	Success        string
+}
+
+type ProductGlobalLinkItem struct {
+	LinkID               string
+	GlobalAttributeID    string
+	AttributeName        string
+	AttributeDisplayName string
+	AttributeType        string
+	RoleName             string
+	RoleDisplayName      string
+	AffectsPricing       bool
+	AffectsShipping      bool
+	TotalOptions         int
+	SelectedOptions      int
+	AllOptions           []GlobalOptionSelectionItem
+}
+
+type GlobalOptionSelectionItem struct {
+	OptionID      string
+	Value         string
+	DisplayValue  string
+	ColorHex      string
+	IsSelected    bool
+	PriceModifier string
+}
+
+func roleBadgeClass(role string) string {
+	switch role {
+	case "variant_axis":
+		return "badge-success"
+	case "filter_only":
+		return "badge-info"
+	case "display_only":
+		return "badge-muted"
+	default:
+		return ""
+	}
+}
+
+func roleLabel(role string) string {
+	switch role {
+	case "variant_axis":
+		return "Variant Axis"
+	case "filter_only":
+		return "Filter Only"
+	case "display_only":
+		return "Display Only"
+	default:
+		return role
+	}
+}
+
+templ ProductGlobalLinksPage(data ProductGlobalLinksData) {
+	@layouts.AdminLayout("Product Global Attributes", "/admin/products") {
+		<div class="page-header">
+			<h2>Edit: { data.ProductName }</h2>
+		</div>
+		@ProductTabs(data.ProductID, "global-attributes")
+		if data.Error != "" {
+			<div class="alert alert-error mb-2">{ data.Error }</div>
+		}
+		if data.Success != "" {
+			<div class="alert alert-success mb-2">{ data.Success }</div>
+		}
+		@ProductGlobalLinksSection(data)
+	}
+}
+
+templ ProductGlobalLinksSection(data ProductGlobalLinksData) {
+	<!-- Link Global Attribute Form -->
+	<div class="card mb-3">
+		<div class="card-header">Link Global Attribute</div>
+		<div class="card-body">
+			if len(data.AvailableAttrs) == 0 {
+				<p class="text-muted">
+					All global attributes are already linked, or no global attributes exist.
+					<a href="/admin/global-attributes/new">Create a new global attribute.</a>
+				</p>
+			} else {
+				<form
+					hx-post={ "/admin/products/" + data.ProductID + "/global-attributes" }
+					hx-target="#global-links-container"
+					hx-swap="innerHTML"
+				>
+					<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+					<div style="display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap;">
+						<div class="form-group" style="margin-bottom: 0; flex: 2; min-width: 180px;">
+							<label for="global_attr_id">Global Attribute</label>
+							<select id="global_attr_id" name="global_attribute_id" required>
+								<option value="">Select attribute...</option>
+								for _, attr := range data.AvailableAttrs {
+									<option value={ attr.ID }>
+										{ attr.DisplayName } ({ globalAttrTypeLabel(attr.AttributeType) }, { fmt.Sprintf("%d options", attr.OptionCount) })
+									</option>
+								}
+							</select>
+						</div>
+						<div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 140px;">
+							<label for="role">Role</label>
+							<select id="role" name="role" required>
+								<option value="variant_axis">Variant Axis</option>
+								<option value="filter_only">Filter Only</option>
+								<option value="display_only">Display Only</option>
+							</select>
+						</div>
+						<div class="form-group" style="margin-bottom: 0;">
+							<label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+								<input type="checkbox" name="affects_pricing" value="true"/>
+								Affects Pricing
+							</label>
+						</div>
+						<div class="form-group" style="margin-bottom: 0;">
+							<label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+								<input type="checkbox" name="affects_shipping" value="true"/>
+								Affects Shipping
+							</label>
+						</div>
+						<div style="margin-bottom: 0;">
+							<button type="submit" class="btn btn-primary btn-sm">Link Attribute</button>
+						</div>
+					</div>
+				</form>
+			}
+		</div>
+	</div>
+	<!-- Linked Attributes -->
+	<div id="global-links-container">
+		if len(data.Links) == 0 {
+			<div class="card mb-3">
+				<div class="card-body text-center text-muted" style="padding: 40px;">
+					No global attributes linked. Use the form above to link a global attribute to this product.
+				</div>
+			</div>
+		}
+		for _, link := range data.Links {
+			@ProductGlobalLinkCard(data.ProductID, link, data.CSRFToken)
+		}
+	</div>
+}
+
+templ ProductGlobalLinkCard(productID string, link ProductGlobalLinkItem, csrfToken string) {
+	<div class="card mb-3" id={ "link-" + link.LinkID }>
+		<!-- Card Header -->
+		<div class="card-header flex justify-between items-center">
+			<div class="flex items-center gap-2">
+				<strong>{ link.AttributeDisplayName }</strong>
+				<span class="text-muted" style="font-size: 0.875rem;">({ link.AttributeName })</span>
+				<span class={ "badge", globalAttrTypeBadgeClass(link.AttributeType) }>{ globalAttrTypeLabel(link.AttributeType) }</span>
+				<span class={ "badge", roleBadgeClass(link.RoleName) }>{ roleLabel(link.RoleName) }</span>
+				if link.AffectsPricing {
+					<span class="badge badge-warning" style="font-size: 0.75rem;">Pricing</span>
+				}
+				if link.AffectsShipping {
+					<span class="badge badge-warning" style="font-size: 0.75rem;">Shipping</span>
+				}
+				<span class="text-muted" style="font-size: 0.8rem;">
+					({ fmt.Sprintf("%d/%d selected", link.SelectedOptions, link.TotalOptions) })
+				</span>
+			</div>
+			<button
+				class="btn btn-sm btn-danger"
+				hx-post={ "/admin/products/" + productID + "/global-attributes/" + link.LinkID + "/delete" }
+				hx-target={ "#link-" + link.LinkID }
+				hx-swap="outerHTML"
+				hx-vals={ "{\"csrf_token\":\"" + csrfToken + "\"}" }
+				hx-confirm={ fmt.Sprintf("Unlink \"%s\" from this product?", link.AttributeDisplayName) }
+			>
+				Unlink
+			</button>
+		</div>
+		<!-- Option Selection -->
+		<div class="card-body">
+			<form
+				hx-post={ "/admin/products/" + productID + "/global-attributes/" + link.LinkID + "/selections" }
+				hx-target={ "#link-" + link.LinkID }
+				hx-swap="outerHTML"
+			>
+				<input type="hidden" name="csrf_token" value={ csrfToken }/>
+				<div class="table-container">
+					<table>
+						<thead>
+							<tr>
+								<th style="width: 40px;">
+									<input type="checkbox" title="Select All"
+										onclick="var cbs = this.closest('table').querySelectorAll('input[name=option_ids]'); cbs.forEach(function(cb) { cb.checked = this.checked; }.bind(this));"
+									/>
+								</th>
+								<th>Value</th>
+								<th>Display Value</th>
+								<th>Color</th>
+								<th>Price Modifier</th>
+							</tr>
+						</thead>
+						<tbody>
+							for _, opt := range link.AllOptions {
+								<tr>
+									<td>
+										<input
+											type="checkbox"
+											name="option_ids"
+											value={ opt.OptionID }
+											checked?={ opt.IsSelected }
+										/>
+									</td>
+									<td>{ opt.Value }</td>
+									<td>
+										if opt.DisplayValue != "" {
+											{ opt.DisplayValue }
+										} else {
+											<span class="text-muted">&mdash;</span>
+										}
+									</td>
+									<td>
+										if opt.ColorHex != "" {
+											<span style="display: inline-flex; align-items: center; gap: 4px;">
+												<span style={ fmt.Sprintf("display: inline-block; width: 16px; height: 16px; border-radius: 3px; border: 1px solid var(--gray-300); background-color: %s;", opt.ColorHex) }></span>
+												<span class="text-muted" style="font-size: 0.875rem;">{ opt.ColorHex }</span>
+											</span>
+										} else {
+											<span class="text-muted">&mdash;</span>
+										}
+									</td>
+									<td>
+										<input
+											type="number"
+											name={ "price_modifier_" + opt.OptionID }
+											value={ opt.PriceModifier }
+											step="0.01"
+											placeholder="0.00"
+											style="width: 100px;"
+										/>
+									</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</div>
+				<div style="margin-top: 8px; display: flex; justify-content: flex-end;">
+					<button type="submit" class="btn btn-primary btn-sm">Save Selections</button>
+				</div>
+			</form>
+		</div>
+	</div>
+}

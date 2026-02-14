@@ -1,0 +1,177 @@
+package admin
+
+import (
+	"fmt"
+	"github.com/forgecommerce/api/templates/layouts"
+)
+
+// --- Data types for global attribute list ---
+
+type GlobalAttributeListData struct {
+	Attributes []GlobalAttributeListItem
+	CSRFToken  string
+	Error      string
+	Success    string
+}
+
+type GlobalAttributeListItem struct {
+	ID            string
+	Name          string
+	DisplayName   string
+	Description   string
+	AttributeType string
+	Category      string
+	OptionCount   int
+	UsageCount    int64
+	IsActive      bool
+}
+
+func globalAttrTypeBadgeClass(attrType string) string {
+	switch attrType {
+	case "select":
+		return "badge-muted"
+	case "color_swatch":
+		return "badge-success"
+	case "button_group":
+		return "badge-warning"
+	case "image_swatch":
+		return "badge-info"
+	default:
+		return ""
+	}
+}
+
+func globalAttrTypeLabel(attrType string) string {
+	switch attrType {
+	case "select":
+		return "Select"
+	case "color_swatch":
+		return "Color Swatch"
+	case "button_group":
+		return "Button Group"
+	case "image_swatch":
+		return "Image Swatch"
+	default:
+		return attrType
+	}
+}
+
+func globalAttrCategoryLabel(cat string) string {
+	switch cat {
+	case "physical":
+		return "Physical"
+	case "material":
+		return "Material"
+	case "style":
+		return "Style"
+	case "technical":
+		return "Technical"
+	case "other":
+		return "Other"
+	default:
+		return cat
+	}
+}
+
+templ GlobalAttributesListPage(data GlobalAttributeListData) {
+	@layouts.AdminLayout("Global Attributes", "/admin/global-attributes") {
+		<div class="page-header flex justify-between items-center">
+			<h2>Global Attributes ({ fmt.Sprintf("%d", len(data.Attributes)) })</h2>
+			<a href="/admin/global-attributes/new" class="btn btn-primary">+ New Global Attribute</a>
+		</div>
+		if data.Error != "" {
+			<div class="alert alert-error mb-2">{ data.Error }</div>
+		}
+		if data.Success != "" {
+			<div class="alert alert-success mb-2">{ data.Success }</div>
+		}
+		<div class="card">
+			<div class="card-header">
+				<span>Reusable Attribute Templates</span>
+			</div>
+			<div class="table-container">
+				<table>
+					<thead>
+						<tr>
+							<th>Name</th>
+							<th>Type</th>
+							<th>Category</th>
+							<th>Options</th>
+							<th>Used By</th>
+							<th>Status</th>
+							<th>Actions</th>
+						</tr>
+					</thead>
+					<tbody id="global-attributes-list">
+						if len(data.Attributes) == 0 {
+							<tr id="no-global-attrs-msg">
+								<td colspan="7" class="text-center text-muted" style="padding: 40px;">
+									No global attributes defined. <a href="/admin/global-attributes/new">Create your first global attribute.</a>
+								</td>
+							</tr>
+						}
+						for _, attr := range data.Attributes {
+							@GlobalAttributeRow(attr, data.CSRFToken)
+						}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	}
+}
+
+templ GlobalAttributeRow(item GlobalAttributeListItem, csrfToken string) {
+	<tr id={ "global-attr-" + item.ID }>
+		<td>
+			<a href={ templ.SafeURL("/admin/global-attributes/" + item.ID) }>
+				<strong>{ item.DisplayName }</strong>
+			</a>
+			<br/>
+			<span class="text-muted" style="font-size: 0.8rem;">{ item.Name }</span>
+		</td>
+		<td>
+			<span class={ "badge", globalAttrTypeBadgeClass(item.AttributeType) }>
+				{ globalAttrTypeLabel(item.AttributeType) }
+			</span>
+		</td>
+		<td>
+			if item.Category != "" {
+				{ globalAttrCategoryLabel(item.Category) }
+			} else {
+				<span class="text-muted">&mdash;</span>
+			}
+		</td>
+		<td>{ fmt.Sprintf("%d", item.OptionCount) }</td>
+		<td>
+			if item.UsageCount > 0 {
+				{ fmt.Sprintf("%d products", item.UsageCount) }
+			} else {
+				<span class="text-muted">None</span>
+			}
+		</td>
+		<td>
+			if item.IsActive {
+				<span class="badge badge-success">Active</span>
+			} else {
+				<span class="badge badge-muted">Inactive</span>
+			}
+		</td>
+		<td>
+			<div class="flex gap-1">
+				<a href={ templ.SafeURL("/admin/global-attributes/" + item.ID) } class="btn btn-sm">Edit</a>
+				if item.UsageCount == 0 {
+					<button
+						class="btn btn-sm btn-danger"
+						hx-post={ "/admin/global-attributes/" + item.ID + "/delete" }
+						hx-target={ "#global-attr-" + item.ID }
+						hx-swap="outerHTML"
+						hx-vals={ "{\"csrf_token\":\"" + csrfToken + "\"}" }
+						hx-confirm={ fmt.Sprintf("Delete global attribute \"%s\"? This cannot be undone.", item.DisplayName) }
+					>
+						Delete
+					</button>
+				}
+			</div>
+		</td>
+	</tr>
+}
