@@ -143,15 +143,17 @@ ON CONFLICT (country_code) DO NOTHING;
 -- =============================================================================
 
 -- Pre-computed bcrypt hash for 'admin123' at cost 12:
--- $2a$12$LJ3m4ys3Lk0TSwHCbWG.r.5sFmwnBuMDlgS7WDAq3r6fRpVHMo7/6
-INSERT INTO admin_users (id, email, name, password_hash, role, is_active, created_at, updated_at)
+-- $2a$12$MJIaL5VIKmVDGD4.qiC3OumyGXw4ESB4oV8dK8NmdkbvfbuEBYcwm
+INSERT INTO admin_users (id, email, name, password_hash, role, is_active, totp_verified, force_2fa_setup, created_at, updated_at)
 VALUES (
   'd0000000-0000-0000-0000-000000000001',
   'admin@forgecommerce.local',
   'Admin',
-  '$2a$12$LJ3m4ys3Lk0TSwHCbWG.r.5sFmwnBuMDlgS7WDAq3r6fRpVHMo7/6',
+  '$2a$12$MJIaL5VIKmVDGD4.qiC3OumyGXw4ESB4oV8dK8NmdkbvfbuEBYcwm',
   'super_admin',
   true,
+  false,
+  false,
   NOW(),
   NOW()
 )

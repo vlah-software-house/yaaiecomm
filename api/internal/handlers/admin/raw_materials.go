@@ -49,7 +49,7 @@ func (h *RawMaterialHandler) ListRawMaterials(w http.ResponseWriter, r *http.Req
 		}
 	}
 
-	// By default show all materials (no active-only filter).
+	// Show all materials by default (no category or active-only filter).
 	materials, total, err := h.materials.List(r.Context(), nil, nil, page, rawMaterialPageSize)
 	if err != nil {
 		h.logger.Error("failed to list raw materials", "error", err)

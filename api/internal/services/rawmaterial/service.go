@@ -18,6 +18,7 @@ import (
 // Service wraps sqlc-generated queries for raw material CRUD operations.
 type Service struct {
 	queries *db.Queries
+	pool    *pgxpool.Pool
 	logger  *slog.Logger
 }
 
@@ -25,6 +26,7 @@ type Service struct {
 func NewService(pool *pgxpool.Pool, logger *slog.Logger) *Service {
 	return &Service{
 		queries: db.New(pool),
+		pool:    pool,
 		logger:  logger,
 	}
 }
@@ -84,48 +86,59 @@ func (s *Service) List(ctx context.Context, categoryID *uuid.UUID, activeOnly *b
 
 	offset := (page - 1) * pageSize
 
-	// The sqlc-generated filter params use plain Go types (uuid.UUID, bool)
-	// rather than pgtype nullable types. The SQL query uses a
-	// "$1::uuid IS NULL OR category_id = $1" pattern intended for nullable
-	// params. With plain Go types, pgx always sends non-NULL values, so the
-	// IS NULL branch never matches. uuid.Nil (zero UUID) won't match any real
-	// category, effectively meaning "no results" rather than "no filter".
+	// Workaround for sqlc NULL-filter bug: the generated query uses
+	// "$1::uuid IS NULL OR category_id = $1" pattern, but sqlc generates
+	// plain Go types (uuid.UUID, bool) that are never NULL. uuid.Nil and
+	// false are valid non-NULL values, so the IS NULL branch never triggers.
 	//
-	// Known sqlc limitation: the NULL-coalescing filter pattern does not work
-	// correctly when sqlc generates plain types instead of pgtype. The proper
-	// fix is to regenerate with pgtype overrides. Until then, callers should
-	// always provide a categoryID when filtering by category.
-	var catFilter uuid.UUID
+	// Solution: use pgtype wrappers to send actual SQL NULL when no filter
+	// is specified. pgx handles pgtype.UUID{Valid: false} as SQL NULL.
+	var catFilter pgtype.UUID
 	if categoryID != nil {
-		catFilter = *categoryID
+		catFilter = pgtype.UUID{Bytes: *categoryID, Valid: true}
 	}
 
-	// Same limitation for the bool filter: a plain Go bool is never NULL.
-	// When activeOnly is nil, we default to false, which means the query will
-	// filter to is_active = false. Callers should pass activeOnly explicitly.
-	var activeFilter bool
+	var activeFilter pgtype.Bool
 	if activeOnly != nil {
-		activeFilter = *activeOnly
+		activeFilter = pgtype.Bool{Bool: *activeOnly, Valid: true}
 	}
 
-	listParams := db.ListRawMaterialsParams{
-		Column1: catFilter,
-		Column2: activeFilter,
-		Limit:   int32(pageSize),
-		Offset:  int32(offset),
-	}
+	// Direct query with pgtype params for proper NULL handling.
+	listQuery := `SELECT id, name, sku, description, category_id, unit_of_measure, cost_per_unit, stock_quantity, low_stock_threshold, supplier_name, supplier_sku, lead_time_days, metadata, is_active, created_at, updated_at FROM raw_materials
+WHERE ($1::uuid IS NULL OR category_id = $1)
+AND ($2::bool IS NULL OR is_active = $2)
+ORDER BY name ASC
+LIMIT $3 OFFSET $4`
 
-	countParams := db.CountRawMaterialsParams{
-		Column1: catFilter,
-		Column2: activeFilter,
-	}
+	countQuery := `SELECT count(*) FROM raw_materials
+WHERE ($1::uuid IS NULL OR category_id = $1)
+AND ($2::bool IS NULL OR is_active = $2)`
 
-	materials, err := s.queries.ListRawMaterials(ctx, listParams)
+	rows, err := s.pool.Query(ctx, listQuery, catFilter, activeFilter, int32(pageSize), int32(offset))
 	if err != nil {
 		return nil, 0, fmt.Errorf("listing raw materials: %w", err)
 	}
+	defer rows.Close()
 
-	total, err := s.queries.CountRawMaterials(ctx, countParams)
+	var materials []db.RawMaterial
+	for rows.Next() {
+		var m db.RawMaterial
+		if err := rows.Scan(
+			&m.ID, &m.Name, &m.Sku, &m.Description, &m.CategoryID,
+			&m.UnitOfMeasure, &m.CostPerUnit, &m.StockQuantity, &m.LowStockThreshold,
+			&m.SupplierName, &m.SupplierSku, &m.LeadTimeDays, &m.Metadata,
+			&m.IsActive, &m.CreatedAt, &m.UpdatedAt,
+		); err != nil {
+			return nil, 0, fmt.Errorf("scanning raw material: %w", err)
+		}
+		materials = append(materials, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterating raw materials: %w", err)
+	}
+
+	var total int64
+	err = s.pool.QueryRow(ctx, countQuery, catFilter, activeFilter).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("counting raw materials: %w", err)
 	}

@@ -131,25 +131,35 @@ func (s *Service) List(ctx context.Context, status *string, page, pageSize int) 
 	}
 	offset := (page - 1) * pageSize
 
-	// CountOrders and ListOrders both accept a string where empty means "no filter"
-	// and the SQL uses ($1::text IS NULL OR status = $1::text).
-	statusFilter := ""
-	if status != nil {
-		statusFilter = *status
+	// Workaround for sqlc NULL-filter bug: the generated query uses
+	// "$1::text IS NULL OR status = $1::text" pattern, but sqlc generates
+	// plain string which is never NULL. Use pgtype.Text to send real NULL.
+	var statusFilter pgtype.Text
+	if status != nil && *status != "" {
+		statusFilter = pgtype.Text{String: *status, Valid: true}
 	}
 
-	total, err := s.queries.CountOrders(ctx, statusFilter)
+	countQuery := `SELECT COUNT(*) FROM orders WHERE ($1::text IS NULL OR status = $1::text)`
+	var total int64
+	err := s.pool.QueryRow(ctx, countQuery, statusFilter).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("counting orders: %w", err)
 	}
 
-	orders, err := s.queries.ListOrders(ctx, db.ListOrdersParams{
-		Column1: statusFilter,
-		Limit:   int32(pageSize),
-		Offset:  int32(offset),
-	})
+	listQuery := `SELECT id, order_number, customer_id, status, email, billing_address, shipping_address, subtotal, shipping_fee, shipping_extra_fees, discount_amount, vat_total, total, vat_number, vat_company_name, vat_reverse_charge, vat_country_code, stripe_payment_intent_id, stripe_checkout_session_id, payment_status, discount_id, coupon_id, discount_breakdown, shipping_method, tracking_number, shipped_at, delivered_at, notes, customer_notes, metadata, created_at, updated_at FROM orders
+WHERE ($1::text IS NULL OR status = $1::text)
+ORDER BY created_at DESC
+LIMIT $2 OFFSET $3`
+
+	rows, err := s.pool.Query(ctx, listQuery, statusFilter, int32(pageSize), int32(offset))
 	if err != nil {
 		return nil, 0, fmt.Errorf("listing orders: %w", err)
+	}
+	defer rows.Close()
+
+	orders, err := pgx.CollectRows(rows, pgx.RowToStructByPos[db.Order])
+	if err != nil {
+		return nil, 0, fmt.Errorf("scanning orders: %w", err)
 	}
 
 	return orders, total, nil
