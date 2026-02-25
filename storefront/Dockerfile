@@ -1,16 +1,17 @@
 # Stage 1: Build the Nuxt application
-FROM node:22-alpine AS build
+FROM node:24-alpine AS build
 
 WORKDIR /src
 
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm install --ignore-scripts
 
 COPY . .
+RUN npm rebuild
 RUN npm run build
 
 # Stage 2: Minimal runtime image
-FROM node:22-alpine
+FROM node:24-alpine
 
 RUN addgroup -S app && adduser -S app -G app
 

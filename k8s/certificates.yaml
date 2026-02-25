@@ -1,0 +1,41 @@
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: api-tls
+  namespace: yaaiecomm
+spec:
+  secretName: api-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  dnsNames:
+    - api-yaaiecomm.test.vlah.sh
+
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: storefront-tls
+  namespace: yaaiecomm
+spec:
+  secretName: storefront-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  dnsNames:
+    - store-yaaiecomm.test.vlah.sh
+
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: admin-tls
+  namespace: yaaiecomm
+spec:
+  secretName: admin-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  dnsNames:
+    - admin-yaaiecomm.test.vlah.sh

@@ -53,7 +53,13 @@ VALUES
   ('a0000000-0000-0000-0000-000000000005', 'parking',       'Parking Rate',       'Transitional rate (12%+), limited countries',                 'parking',       false, 5),
   ('a0000000-0000-0000-0000-000000000006', 'zero',          'Zero Rate',          '0% rate with right of input VAT deduction',                  'zero',          false, 6),
   ('a0000000-0000-0000-0000-000000000007', 'exempt',        'Exempt',             'No VAT charged, no input VAT deduction',                     'exempt',        false, 7)
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (name) DO UPDATE SET
+  id = EXCLUDED.id,
+  display_name = EXCLUDED.display_name,
+  description = EXCLUDED.description,
+  maps_to_rate_type = EXCLUDED.maps_to_rate_type,
+  is_default = EXCLUDED.is_default,
+  position = EXCLUDED.position;
 
 
 -- =============================================================================

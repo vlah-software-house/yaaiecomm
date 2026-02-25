@@ -8,8 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"mime/multipart"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -19,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	db "github.com/forgecommerce/api/internal/database/gen"
+	"github.com/forgecommerce/api/internal/storage"
 )
 
 var (
@@ -47,22 +46,26 @@ var allowedContentTypes = map[string]bool{
 
 // Service provides business logic for media asset and product image management.
 type Service struct {
-	queries   *db.Queries
-	pool      *pgxpool.Pool
-	mediaPath string
-	logger    *slog.Logger
+	queries        *db.Queries
+	pool           *pgxpool.Pool
+	publicStorage  storage.Storage
+	privateStorage storage.Storage // nil until private bucket features are needed
+	logger         *slog.Logger
 }
 
 // NewService creates a new media service.
-func NewService(pool *pgxpool.Pool, mediaPath string, logger *slog.Logger) *Service {
+// publicStore handles product images (publicly accessible).
+// privateStore handles internal files (pre-signed URL access). Pass nil if not needed yet.
+func NewService(pool *pgxpool.Pool, publicStore storage.Storage, privateStore storage.Storage, logger *slog.Logger) *Service {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &Service{
-		queries:   db.New(pool),
-		pool:      pool,
-		mediaPath: mediaPath,
-		logger:    logger,
+		queries:        db.New(pool),
+		pool:           pool,
+		publicStorage:  publicStore,
+		privateStorage: privateStore,
+		logger:         logger,
 	}
 }
 
@@ -98,62 +101,52 @@ func (s *Service) Upload(ctx context.Context, file multipart.File, header *multi
 		}
 	}
 
-	// Generate unique filename
+	// Generate storage key
 	assetID := uuid.New()
 	sanitized := sanitizeFilename(header.Filename)
-	storedFilename := fmt.Sprintf("%s-%s", assetID.String(), sanitized)
+	key := fmt.Sprintf("%s-%s", assetID.String(), sanitized)
 
-	// Ensure media directory exists
-	if err := os.MkdirAll(s.mediaPath, 0o755); err != nil {
-		return db.MediaAsset{}, fmt.Errorf("creating media directory: %w", err)
-	}
-
-	// Write file to disk
-	destPath := filepath.Join(s.mediaPath, storedFilename)
-	dst, err := os.Create(destPath)
+	// Upload to storage backend
+	url, err := s.publicStorage.Put(ctx, key, file, contentType)
 	if err != nil {
-		return db.MediaAsset{}, fmt.Errorf("creating file on disk: %w", err)
+		return db.MediaAsset{}, fmt.Errorf("uploading to storage: %w", err)
 	}
-	defer dst.Close()
-
-	written, err := io.Copy(dst, file)
-	if err != nil {
-		os.Remove(destPath) // Clean up on failure
-		return db.MediaAsset{}, fmt.Errorf("writing file to disk: %w", err)
-	}
-
-	// Build the URL path (relative, served via /media/)
-	urlPath := "/media/" + storedFilename
 
 	now := time.Now().UTC()
 
 	asset, err := s.queries.CreateMediaAsset(ctx, db.CreateMediaAssetParams{
 		ID:               assetID,
-		Filename:         storedFilename,
+		Filename:         key,
 		OriginalFilename: header.Filename,
 		ContentType:      contentType,
-		SizeBytes:        written,
-		Url:              urlPath,
-		Width:            nil, // Image dimension detection could be added later
+		SizeBytes:        header.Size,
+		Url:              url,
+		Width:            nil,
 		Height:           nil,
 		Metadata:         json.RawMessage(`{}`),
 		CreatedAt:        now,
 	})
 	if err != nil {
-		os.Remove(destPath) // Clean up on failure
+		// Best-effort cleanup on DB failure
+		if delErr := s.publicStorage.Delete(ctx, key); delErr != nil {
+			s.logger.Warn("failed to clean up uploaded file after DB error",
+				slog.String("key", key),
+				slog.String("error", delErr.Error()),
+			)
+		}
 		return db.MediaAsset{}, fmt.Errorf("creating media asset record: %w", err)
 	}
 
 	s.logger.Info("media asset uploaded",
 		slog.String("asset_id", asset.ID.String()),
-		slog.String("filename", storedFilename),
-		slog.Int64("size_bytes", written),
+		slog.String("key", key),
+		slog.Int64("size_bytes", header.Size),
 	)
 
 	return asset, nil
 }
 
-// Delete removes a media asset file from disk and its database record.
+// Delete removes a media asset file from storage and its database record.
 func (s *Service) Delete(ctx context.Context, assetID uuid.UUID) error {
 	asset, err := s.queries.GetMediaAsset(ctx, assetID)
 	if err != nil {
@@ -163,11 +156,10 @@ func (s *Service) Delete(ctx context.Context, assetID uuid.UUID) error {
 		return fmt.Errorf("getting media asset: %w", err)
 	}
 
-	// Remove file from disk
-	filePath := filepath.Join(s.mediaPath, asset.Filename)
-	if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
-		s.logger.Warn("failed to remove media file from disk",
-			slog.String("path", filePath),
+	// Remove from storage using the stored filename as key
+	if err := s.publicStorage.Delete(ctx, asset.Filename); err != nil {
+		s.logger.Warn("failed to remove media file from storage",
+			slog.String("key", asset.Filename),
 			slog.String("error", err.Error()),
 		)
 	}
@@ -224,13 +216,12 @@ func (s *Service) RemoveFromProduct(ctx context.Context, imageID uuid.UUID) erro
 		return fmt.Errorf("getting product image: %w", err)
 	}
 
-	// Try to remove the file from disk (extract filename from URL)
-	if strings.HasPrefix(img.Url, "/media/") {
-		filename := strings.TrimPrefix(img.Url, "/media/")
-		filePath := filepath.Join(s.mediaPath, filename)
-		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
-			s.logger.Warn("failed to remove image file from disk",
-				slog.String("path", filePath),
+	// Extract key from URL and remove from storage
+	key := keyFromURL(img.Url)
+	if key != "" {
+		if err := s.publicStorage.Delete(ctx, key); err != nil {
+			s.logger.Warn("failed to remove image file from storage",
+				slog.String("key", key),
 				slog.String("error", err.Error()),
 			)
 		}
@@ -244,7 +235,6 @@ func (s *Service) RemoveFromProduct(ctx context.Context, imageID uuid.UUID) erro
 		slog.String("image_id", imageID.String()),
 		slog.String("product_id", img.ProductID.String()),
 	)
-
 	return nil
 }
 
@@ -380,6 +370,25 @@ func (s *Service) UpdateAltText(ctx context.Context, imageID uuid.UUID, altText 
 
 // --- Helpers ---
 
+// keyFromURL extracts the storage key from a URL.
+// For local URLs like "/media/uuid-file.webp" it returns "uuid-file.webp".
+// For S3 URLs like "https://cdn.example.com/uuid-file.webp" it returns "uuid-file.webp".
+// Returns empty string if the URL is empty.
+func keyFromURL(url string) string {
+	if url == "" {
+		return ""
+	}
+	// Local: /media/key
+	if strings.HasPrefix(url, "/media/") {
+		return strings.TrimPrefix(url, "/media/")
+	}
+	// S3: https://domain/key — take everything after the last "/"
+	if idx := strings.LastIndex(url, "/"); idx >= 0 {
+		return url[idx+1:]
+	}
+	return url
+}
+
 // isValidImageMagicBytes checks the first bytes of a file against known image signatures.
 func isValidImageMagicBytes(buf []byte) bool {
 	if len(buf) < 4 {
@@ -413,7 +422,10 @@ func isValidImageMagicBytes(buf []byte) bool {
 // keeping only alphanumeric, hyphens, underscores, and dots.
 func sanitizeFilename(name string) string {
 	// Get just the base filename, no path
-	name = filepath.Base(name)
+	name = name[strings.LastIndex(name, "/")+1:]
+	if i := strings.LastIndex(name, "\\"); i >= 0 {
+		name = name[i+1:]
+	}
 
 	var sb strings.Builder
 	for _, r := range name {

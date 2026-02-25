@@ -23,14 +23,28 @@ type Config struct {
 	StripeWebhookKey   string
 	StripePublicKey    string
 
-	MediaStorage string
-	MediaPath    string
+	MediaStorage string // "local" or "s3"
+	MediaPath    string // local-only: filesystem path
+
+	S3 S3Config
 
 	SMTPHost string
 	SMTPPort int
 	SMTPFrom string
 
 	VAT VATConfig
+}
+
+// S3Config holds settings for S3-compatible object storage (CEPH, MinIO, AWS).
+type S3Config struct {
+	Endpoint       string
+	Region         string
+	AccessKey      string
+	SecretKey      string
+	ForcePathStyle bool
+	PublicBucket   string // product images, storefront assets
+	PublicBucketURL string // base URL where public bucket is reachable
+	PrivateBucket  string // exports, invoices, internal files
 }
 
 type VATConfig struct {
@@ -61,6 +75,17 @@ func Load() (*Config, error) {
 
 		MediaStorage: getEnv("MEDIA_STORAGE", "local"),
 		MediaPath:    getEnv("MEDIA_PATH", "./media"),
+
+		S3: S3Config{
+			Endpoint:        getEnv("S3_ENDPOINT", ""),
+			Region:          getEnv("S3_REGION", "us-east-1"),
+			AccessKey:       getEnv("S3_ACCESS_KEY_ID", ""),
+			SecretKey:       getEnv("S3_SECRET_ACCESS_KEY", ""),
+			ForcePathStyle:  getEnvBool("S3_FORCE_PATH_STYLE", true),
+			PublicBucket:    getEnv("S3_PUBLIC_BUCKET", ""),
+			PublicBucketURL: getEnv("S3_PUBLIC_BUCKET_URL", ""),
+			PrivateBucket:   getEnv("S3_PRIVATE_BUCKET", ""),
+		},
 
 		SMTPHost: getEnv("SMTP_HOST", "localhost"),
 		SMTPPort: getEnvInt("SMTP_PORT", 1025),
@@ -106,6 +131,17 @@ func LoadDev() *Config {
 
 			MediaStorage: getEnv("MEDIA_STORAGE", "local"),
 			MediaPath:    getEnv("MEDIA_PATH", "./media"),
+
+			S3: S3Config{
+				Endpoint:        getEnv("S3_ENDPOINT", ""),
+				Region:          getEnv("S3_REGION", "us-east-1"),
+				AccessKey:       getEnv("S3_ACCESS_KEY_ID", ""),
+				SecretKey:       getEnv("S3_SECRET_ACCESS_KEY", ""),
+				ForcePathStyle:  getEnvBool("S3_FORCE_PATH_STYLE", true),
+				PublicBucket:    getEnv("S3_PUBLIC_BUCKET", ""),
+				PublicBucketURL: getEnv("S3_PUBLIC_BUCKET_URL", ""),
+				PrivateBucket:   getEnv("S3_PRIVATE_BUCKET", ""),
+			},
 
 			SMTPHost: getEnv("SMTP_HOST", "localhost"),
 			SMTPPort: getEnvInt("SMTP_PORT", 1025),

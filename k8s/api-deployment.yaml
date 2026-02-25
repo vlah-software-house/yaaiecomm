@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: yaaiecomm
+  labels:
+    app: forgecommerce
+    component: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: forgecommerce
+      component: api
+  template:
+    metadata:
+      labels:
+        app: forgecommerce
+        component: api
+    spec:
+      containers:
+        - name: api
+          image: private-registry.default.svc.cluster.local:5000/forgecommerce-api:latest
+          ports:
+            - name: api
+              containerPort: 8080
+            - name: admin
+              containerPort: 8081
+          envFrom:
+            - secretRef:
+                name: forgecommerce-env
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi

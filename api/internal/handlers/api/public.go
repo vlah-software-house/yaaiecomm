@@ -67,6 +67,16 @@ type listResponse struct {
 	Total      int64 `json:"total"`
 }
 
+// imageJSON is the public-facing image representation.
+type imageJSON struct {
+	ID        uuid.UUID  `json:"id"`
+	URL       string     `json:"url"`
+	AltText   *string    `json:"alt_text"`
+	Position  int32      `json:"position"`
+	IsPrimary bool       `json:"is_primary"`
+	VariantID *uuid.UUID `json:"variant_id,omitempty"`
+}
+
 // productSummary is the public-facing product representation for list endpoints.
 type productSummary struct {
 	ID               uuid.UUID      `json:"id"`
@@ -78,6 +88,7 @@ type productSummary struct {
 	ShortDescription *string        `json:"short_description"`
 	Status           string         `json:"status"`
 	HasVariants      bool           `json:"has_variants"`
+	FeaturedImage    *imageJSON     `json:"featured_image"`
 	CreatedAt        time.Time      `json:"created_at"`
 }
 
@@ -99,6 +110,7 @@ type productDetail struct {
 	Metadata                json.RawMessage `json:"metadata,omitempty"`
 	CreatedAt               time.Time       `json:"created_at"`
 	UpdatedAt               time.Time       `json:"updated_at"`
+	Images                  []imageJSON     `json:"images"`
 	Attributes              []attributeJSON `json:"attributes"`
 	Variants                []variantJSON   `json:"variants"`
 }
@@ -136,6 +148,7 @@ type variantJSON struct {
 	IsActive       bool              `json:"is_active"`
 	Position       int32             `json:"position"`
 	Options        []variantOptJSON  `json:"options"`
+	Images         []imageJSON       `json:"images"`
 }
 
 // variantOptJSON represents the attribute-option pair for a variant.
@@ -196,6 +209,11 @@ func (h *PublicHandler) ListProducts(w http.ResponseWriter, r *http.Request) {
 			Status:           p.Status,
 			HasVariants:      p.HasVariants,
 			CreatedAt:        p.CreatedAt,
+		}
+
+		// Fetch featured image (primary image) for each product.
+		if primary, err := h.queries.GetPrimaryImageByProduct(r.Context(), p.ID); err == nil {
+			summaries[i].FeaturedImage = productImageToJSON(primary)
 		}
 	}
 
@@ -278,6 +296,27 @@ func (h *PublicHandler) GetProduct(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	// Load all product images (product-level + variant-level, ordered by position).
+	allImages, err := h.queries.ListProductImagesByProduct(r.Context(), p.ID)
+	if err != nil {
+		h.logger.Error("failed to list product images", "product_id", p.ID, "error", err)
+		writeJSON(w, http.StatusInternalServerError, errorJSON{Error: "internal server error"})
+		return
+	}
+
+	// Build image list and index variant images by variant ID.
+	imageList := make([]imageJSON, 0, len(allImages))
+	variantImages := make(map[uuid.UUID][]imageJSON)
+	for _, img := range allImages {
+		ij := productImageToJSON(img)
+		imageList = append(imageList, *ij)
+
+		if img.VariantID.Valid {
+			vid := uuid.UUID(img.VariantID.Bytes)
+			variantImages[vid] = append(variantImages[vid], *ij)
+		}
+	}
+
 	// Load active variants with their options.
 	variants, err := h.variantSvc.List(r.Context(), p.ID)
 	if err != nil {
@@ -308,6 +347,12 @@ func (h *PublicHandler) GetProduct(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		// Attach variant-specific images (empty array if none).
+		vImages := variantImages[v.ID]
+		if vImages == nil {
+			vImages = []imageJSON{}
+		}
+
 		variantList = append(variantList, variantJSON{
 			ID:             v.ID,
 			Sku:            v.Sku,
@@ -319,6 +364,7 @@ func (h *PublicHandler) GetProduct(w http.ResponseWriter, r *http.Request) {
 			IsActive:       v.IsActive,
 			Position:       v.Position,
 			Options:        optEntries,
+			Images:         vImages,
 		})
 	}
 
@@ -339,6 +385,7 @@ func (h *PublicHandler) GetProduct(w http.ResponseWriter, r *http.Request) {
 		Metadata:         p.Metadata,
 		CreatedAt:        p.CreatedAt,
 		UpdatedAt:        p.UpdatedAt,
+		Images:           imageList,
 		Attributes:       attrList,
 		Variants:         variantList,
 	}
@@ -377,6 +424,16 @@ func (h *PublicHandler) ListProductVariants(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// Pre-load all images for this product and index by variant ID.
+	allImages, _ := h.queries.ListProductImagesByProduct(r.Context(), p.ID)
+	variantImgs := make(map[uuid.UUID][]imageJSON)
+	for _, img := range allImages {
+		if img.VariantID.Valid {
+			vid := uuid.UUID(img.VariantID.Bytes)
+			variantImgs[vid] = append(variantImgs[vid], *productImageToJSON(img))
+		}
+	}
+
 	result := make([]variantJSON, 0, len(variants))
 	for _, v := range variants {
 		if !v.IsActive {
@@ -399,6 +456,11 @@ func (h *PublicHandler) ListProductVariants(w http.ResponseWriter, r *http.Reque
 			}
 		}
 
+		vImages := variantImgs[v.ID]
+		if vImages == nil {
+			vImages = []imageJSON{}
+		}
+
 		result = append(result, variantJSON{
 			ID:             v.ID,
 			Sku:            v.Sku,
@@ -410,6 +472,7 @@ func (h *PublicHandler) ListProductVariants(w http.ResponseWriter, r *http.Reque
 			IsActive:       v.IsActive,
 			Position:       v.Position,
 			Options:        optEntries,
+			Images:         vImages,
 		})
 	}
 
@@ -505,4 +568,16 @@ func pgtypeUUIDToPtr(pg pgtype.UUID) *uuid.UUID {
 	}
 	id := uuid.UUID(pg.Bytes)
 	return &id
+}
+
+// productImageToJSON converts a database ProductImage to the public API imageJSON.
+func productImageToJSON(img db.ProductImage) *imageJSON {
+	return &imageJSON{
+		ID:        img.ID,
+		URL:       img.Url,
+		AltText:   img.AltText,
+		Position:  img.Position,
+		IsPrimary: img.IsPrimary,
+		VariantID: pgtypeUUIDToPtr(img.VariantID),
+	}
 }

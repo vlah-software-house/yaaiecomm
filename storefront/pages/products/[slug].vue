@@ -36,22 +36,58 @@
       </nav>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-10">
-        <!-- Product image -->
-        <div class="aspect-square bg-gray-100 rounded-lg flex items-center justify-center border border-gray-200">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="h-24 w-24 text-gray-300"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
+        <!-- Image gallery -->
+        <div>
+          <!-- Main image -->
+          <div class="aspect-square bg-gray-100 rounded-lg overflow-hidden border border-gray-200">
+            <img
+              v-if="activeImage"
+              :src="activeImage.url"
+              :alt="activeImage.alt_text || product.name"
+              class="h-full w-full object-contain"
+            >
+            <div v-else class="h-full w-full flex items-center justify-center">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-24 w-24 text-gray-300"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="1"
+                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                />
+              </svg>
+            </div>
+          </div>
+
+          <!-- Thumbnail strip -->
+          <div
+            v-if="displayImages.length > 1"
+            class="mt-3 flex gap-2 overflow-x-auto"
           >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="1"
-              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-            />
-          </svg>
+            <button
+              v-for="img in displayImages"
+              :key="img.id"
+              :class="[
+                'flex-shrink-0 w-16 h-16 rounded-md overflow-hidden border-2 transition-all',
+                activeImage?.id === img.id
+                  ? 'border-indigo-600 ring-1 ring-indigo-600'
+                  : 'border-gray-200 hover:border-gray-400',
+              ]"
+              @click="activeImageId = img.id"
+            >
+              <img
+                :src="img.url"
+                :alt="img.alt_text || product.name"
+                class="h-full w-full object-cover"
+                loading="lazy"
+              >
+            </button>
+          </div>
         </div>
 
         <!-- Product info -->
@@ -215,7 +251,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ProductDetail, ProductVariant, Country } from '~/types'
+import type { ProductDetail, ProductVariant, ProductImage, Country } from '~/types'
 
 const route = useRoute()
 const slug = route.params.slug as string
@@ -229,6 +265,7 @@ const quantity = ref(1)
 const addingToCart = ref(false)
 const addedToCart = ref(false)
 const cartError = ref<string | null>(null)
+const activeImageId = ref<string | null>(null)
 
 const countries = ref<Country[]>([])
 const selectedCountry = ref('')
@@ -245,6 +282,41 @@ function formatPrice(price: string): string {
   const num = parseFloat(price)
   return `€${num.toFixed(2)}`
 }
+
+// Resolve images for the current view: variant-specific images take priority,
+// falling back to product-level images.
+const displayImages = computed<ProductImage[]>(() => {
+  if (!product.value) return []
+
+  // If a variant is selected and it has its own images, show those.
+  if (selectedVariant.value && selectedVariant.value.images.length > 0) {
+    return selectedVariant.value.images
+  }
+
+  // Otherwise show all product images (which includes product-level images).
+  return product.value.images || []
+})
+
+// The currently active (displayed) image.
+const activeImage = computed<ProductImage | null>(() => {
+  const images = displayImages.value
+  if (!images.length) return null
+
+  // If user clicked a specific thumbnail, show that.
+  if (activeImageId.value) {
+    const found = images.find(img => img.id === activeImageId.value)
+    if (found) return found
+  }
+
+  // Default: show the primary (featured) image, or the first one.
+  return images.find(img => img.is_primary) || images[0]
+})
+
+// When the variant changes, reset the active image selection so the gallery
+// switches to the new variant's images (or falls back to product-level).
+watch(() => selectedVariant.value?.id, () => {
+  activeImageId.value = null
+})
 
 const selectedVariant = computed<ProductVariant | null>(() => {
   if (!product.value) return null

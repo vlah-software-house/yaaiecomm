@@ -1,5 +1,14 @@
 // Product types matching the Go API responses.
 
+export interface ProductImage {
+  id: string
+  url: string
+  alt_text: string | null
+  position: number
+  is_primary: boolean
+  variant_id?: string
+}
+
 export interface ProductSummary {
   id: string
   name: string
@@ -10,6 +19,7 @@ export interface ProductSummary {
   short_description: string | null
   status: string
   has_variants: boolean
+  featured_image: ProductImage | null
   created_at: string
 }
 
@@ -30,6 +40,7 @@ export interface ProductDetail {
   metadata?: Record<string, unknown>
   created_at: string
   updated_at: string
+  images: ProductImage[]
   attributes: ProductAttribute[]
   variants: ProductVariant[]
 }
@@ -64,6 +75,7 @@ export interface ProductVariant {
   is_active: boolean
   position: number
   options: VariantOption[]
+  images: ProductImage[]
 }
 
 export interface VariantOption {

@@ -1,0 +1,56 @@
+---
+# Storefront + API (public)
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: storefront
+  namespace: yaaiecomm
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    # API routes
+    - match: Host(`api-yaaiecomm.test.vlah.sh`)
+      kind: Rule
+      services:
+        - name: api
+          port: 8080
+  tls:
+    secretName: api-tls
+
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: storefront-route
+  namespace: yaaiecomm
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`store-yaaiecomm.test.vlah.sh`)
+      kind: Rule
+      services:
+        - name: storefront
+          port: 3000
+  tls:
+    secretName: storefront-tls
+
+---
+# Admin panel
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: admin
+  namespace: yaaiecomm
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`admin-yaaiecomm.test.vlah.sh`)
+      kind: Rule
+      services:
+        - name: api
+          port: 8081
+  tls:
+    secretName: admin-tls

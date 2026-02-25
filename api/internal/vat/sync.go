@@ -360,19 +360,40 @@ func (s *RateSyncer) fetchFromTEDB(ctx context.Context) ([]VATRate, error) {
 	return rates, nil
 }
 
+// flexibleFloat handles JSON values that can be a number or `false`.
+// euvatrates.com returns `false` instead of 0 or null when a rate type
+// does not exist for a country.
+type flexibleFloat float64
+
+func (f *flexibleFloat) UnmarshalJSON(data []byte) error {
+	// Check for boolean false (the only non-numeric value euvatrates.com uses).
+	if string(data) == "false" {
+		*f = 0
+		return nil
+	}
+	var v float64
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	*f = flexibleFloat(v)
+	return nil
+}
+
 // euVATRatesResponse represents the JSON structure returned by euvatrates.com.
 type euVATRatesResponse struct {
 	Rates map[string]euVATCountryRates `json:"rates"`
 }
 
 // euVATCountryRates represents a single country's rates in the euvatrates.com JSON.
+// Fields use flexibleFloat because euvatrates.com returns `false` (boolean)
+// instead of 0 for rate types a country does not have.
 type euVATCountryRates struct {
-	Country          string  `json:"country"`
-	StandardRate     float64 `json:"standard_rate"`
-	ReducedRate      float64 `json:"reduced_rate"`
-	ReducedRateAlt   float64 `json:"reduced_rate_alt"`
-	SuperReducedRate float64 `json:"super_reduced_rate"`
-	ParkingRate      float64 `json:"parking_rate"`
+	Country          string        `json:"country"`
+	StandardRate     flexibleFloat `json:"standard_rate"`
+	ReducedRate      flexibleFloat `json:"reduced_rate"`
+	ReducedRateAlt   flexibleFloat `json:"reduced_rate_alt"`
+	SuperReducedRate flexibleFloat `json:"super_reduced_rate"`
+	ParkingRate      flexibleFloat `json:"parking_rate"`
 }
 
 // fetchFromEUVATRates fetches VAT rates from the euvatrates.com JSON API.
@@ -413,19 +434,27 @@ func (s *RateSyncer) fetchFromEUVATRates(ctx context.Context) ([]VATRate, error)
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	var rates []VATRate
 
+	// Build a set of valid ISO country codes for fast lookup.
+	validCodes := make(map[string]bool, len(euMemberStates))
+	for _, code := range euMemberStates {
+		validCodes[code] = true
+	}
+
 	for countryCode, countryRates := range data.Rates {
-		// Only include EU member state codes (2-letter ISO).
-		if len(countryCode) != 2 {
+		// Only include ISO codes that match our 27 EU member states.
+		// This filters out non-ISO codes (EL for Greece), non-EU
+		// countries (GB, UK), and any unexpected entries.
+		if !validCodes[countryCode] {
 			continue
 		}
 
 		// Map each non-zero rate to a VATRate entry.
 		rateMap := map[string]float64{
-			RateTypeStandard:     countryRates.StandardRate,
-			RateTypeReduced:      countryRates.ReducedRate,
-			RateTypeReducedAlt:   countryRates.ReducedRateAlt,
-			RateTypeSuperReduced: countryRates.SuperReducedRate,
-			RateTypeParking:      countryRates.ParkingRate,
+			RateTypeStandard:     float64(countryRates.StandardRate),
+			RateTypeReduced:      float64(countryRates.ReducedRate),
+			RateTypeReducedAlt:   float64(countryRates.ReducedRateAlt),
+			RateTypeSuperReduced: float64(countryRates.SuperReducedRate),
+			RateTypeParking:      float64(countryRates.ParkingRate),
 		}
 
 		for rateType, rateVal := range rateMap {

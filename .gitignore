@@ -1,6 +1,7 @@
-# Environment
+# Environment & Secrets
 .env
 .env.local
+.secrets
 
 # Go
 api/tmp/

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: storefront
+  namespace: yaaiecomm
+  labels:
+    app: forgecommerce
+    component: storefront
+spec:
+  selector:
+    app: forgecommerce
+    component: storefront
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000

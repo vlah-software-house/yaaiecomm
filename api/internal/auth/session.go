@@ -25,8 +25,7 @@ var (
 
 // Session represents an active admin session.
 type Session struct {
-	ID          uuid.UUID
-	Token       string
+	ID          string // session token (text PK)
 	AdminUserID uuid.UUID
 	IPAddress   string
 	UserAgent   string
@@ -55,7 +54,7 @@ func NewSessionManager(pool *pgxpool.Pool, sessionTTL time.Duration) *SessionMan
 
 // CreateSession creates a new session for an admin user.
 // Generates a cryptographically random 32-byte token (hex encoded = 64 chars).
-// Stores in admin_sessions table with admin_user_id, ip_address, user_agent, expires_at.
+// The token is stored as the primary key in the sessions table.
 // Returns the session token.
 func (sm *SessionManager) CreateSession(ctx context.Context, adminUserID uuid.UUID, ipAddress, userAgent string) (string, error) {
 	token, err := generateToken()
@@ -66,9 +65,9 @@ func (sm *SessionManager) CreateSession(ctx context.Context, adminUserID uuid.UU
 	expiresAt := time.Now().UTC().Add(sm.sessionTTL)
 
 	_, err = sm.pool.Exec(ctx, `
-		INSERT INTO admin_sessions (id, token, admin_user_id, ip_address, user_agent, created_at, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`, uuid.New(), token, adminUserID, ipAddress, userAgent, time.Now().UTC(), expiresAt)
+		INSERT INTO sessions (id, admin_user_id, ip_address, user_agent, created_at, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`, token, adminUserID, ipAddress, userAgent, time.Now().UTC(), expiresAt)
 	if err != nil {
 		return "", fmt.Errorf("inserting session: %w", err)
 	}
@@ -82,12 +81,11 @@ func (sm *SessionManager) CreateSession(ctx context.Context, adminUserID uuid.UU
 func (sm *SessionManager) GetSession(ctx context.Context, token string) (*Session, error) {
 	session := &Session{}
 	err := sm.pool.QueryRow(ctx, `
-		SELECT id, token, admin_user_id, ip_address, user_agent, created_at, expires_at
-		FROM admin_sessions
-		WHERE token = $1 AND expires_at > NOW()
+		SELECT id, admin_user_id, ip_address, user_agent, created_at, expires_at
+		FROM sessions
+		WHERE id = $1 AND expires_at > NOW()
 	`, token).Scan(
 		&session.ID,
-		&session.Token,
 		&session.AdminUserID,
 		&session.IPAddress,
 		&session.UserAgent,
@@ -104,7 +102,7 @@ func (sm *SessionManager) GetSession(ctx context.Context, token string) (*Sessio
 	// Sliding window: extend expiration on valid access.
 	newExpiry := time.Now().UTC().Add(sm.sessionTTL)
 	_, err = sm.pool.Exec(ctx, `
-		UPDATE admin_sessions SET expires_at = $1 WHERE id = $2
+		UPDATE sessions SET expires_at = $1 WHERE id = $2
 	`, newExpiry, session.ID)
 	if err != nil {
 		// Log but don't fail the request if we can't extend the session.
@@ -118,7 +116,7 @@ func (sm *SessionManager) GetSession(ctx context.Context, token string) (*Sessio
 // DeleteSession removes a session by token (logout).
 func (sm *SessionManager) DeleteSession(ctx context.Context, token string) error {
 	result, err := sm.pool.Exec(ctx, `
-		DELETE FROM admin_sessions WHERE token = $1
+		DELETE FROM sessions WHERE id = $1
 	`, token)
 	if err != nil {
 		return fmt.Errorf("deleting session: %w", err)
@@ -134,7 +132,7 @@ func (sm *SessionManager) DeleteSession(ctx context.Context, token string) error
 // DeleteUserSessions removes all sessions for a user (force logout everywhere).
 func (sm *SessionManager) DeleteUserSessions(ctx context.Context, adminUserID uuid.UUID) error {
 	_, err := sm.pool.Exec(ctx, `
-		DELETE FROM admin_sessions WHERE admin_user_id = $1
+		DELETE FROM sessions WHERE admin_user_id = $1
 	`, adminUserID)
 	if err != nil {
 		return fmt.Errorf("deleting user sessions: %w", err)
@@ -146,7 +144,7 @@ func (sm *SessionManager) DeleteUserSessions(ctx context.Context, adminUserID uu
 // CleanupExpired removes all expired sessions. Should be called periodically.
 func (sm *SessionManager) CleanupExpired(ctx context.Context) (int64, error) {
 	result, err := sm.pool.Exec(ctx, `
-		DELETE FROM admin_sessions WHERE expires_at <= NOW()
+		DELETE FROM sessions WHERE expires_at <= NOW()
 	`)
 	if err != nil {
 		return 0, fmt.Errorf("cleaning up expired sessions: %w", err)

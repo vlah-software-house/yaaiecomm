@@ -61,9 +61,35 @@
 | **Database** | PostgreSQL 16+ | Single database. No ORM — sqlc + pgx |
 | **Payments** | Stripe (Checkout → Elements later) | Payment processing, webhook-driven |
 | **VAT Engine** | Go service + scheduled sync | Rate management, calculation, VIES validation |
-| **Media** | Local filesystem (S3-compatible interface) | Product images, assets |
+| **Media** | S3-compatible (CEPH) + local fallback | Product images, assets (public bucket) |
+| **File Storage** | S3-compatible (CEPH) | Exports, invoices, internal files (private bucket) |
 | **Scheduler** | Go (internal cron) | Daily VAT rate sync, scheduled tasks |
 | **Testing** | Playwright (E2E), Go testing (unit/integration) | Full test coverage |
+
+### Storage Architecture — Dual-Bucket S3
+
+Media and file storage uses a `storage.Storage` interface (`api/internal/storage/`) with two implementations:
+
+| Backend | When | Package |
+|---------|------|---------|
+| **Local** | Development (`MEDIA_STORAGE=local`) | `storage.NewLocal(path, urlPrefix)` |
+| **S3** | Production (`MEDIA_STORAGE=s3`) | `storage.NewS3(ctx, S3Config)` — works with CEPH, MinIO, AWS |
+
+Two separate buckets:
+
+| Bucket | Purpose | Access | Content |
+|--------|---------|--------|---------|
+| **Public** (`S3_PUBLIC_BUCKET`) | Storefront media | Public-read, served via `S3_PUBLIC_BUCKET_URL` | Product images, category images, swatches |
+| **Private** (`S3_PRIVATE_BUCKET`) | Internal files | Pre-signed URLs only (time-limited) | CSV exports, invoices, backups |
+
+```go
+// storage.Storage interface
+Put(ctx, key, body, contentType) (url, error)
+Delete(ctx, key) error
+PresignGet(ctx, key, expiry) (url, error)
+```
+
+The media service (`services/media`) receives `publicStorage` and `privateStorage` via constructor injection. When `MEDIA_STORAGE=s3`, the Go server does NOT serve `/media/` — images are served directly by the S3/CDN public URL. CEPH requires `S3_FORCE_PATH_STYLE=true`.
 
 ---
 
@@ -860,7 +886,18 @@ ADMIN_URL=https://admin.store.example.com
 DATABASE_URL=postgres://...
 JWT_SECRET=..., SESSION_SECRET=..., TOTP_ISSUER=ForgeCommerce
 STRIPE_SECRET_KEY=sk_test_..., STRIPE_WEBHOOK_SECRET=whsec_..., STRIPE_PUBLIC_KEY=pk_test_...
-MEDIA_STORAGE=local, MEDIA_PATH=./media
+MEDIA_STORAGE=s3                     # "local" for dev, "s3" for production
+MEDIA_PATH=./media                   # local-only: filesystem path
+
+# S3 Object Storage (CEPH / MinIO / AWS)
+S3_ENDPOINT=https://s3.ceph-provider.com
+S3_ACCESS_KEY_ID=..., S3_SECRET_ACCESS_KEY=...
+S3_REGION=us-east-1                  # dummy for CEPH
+S3_FORCE_PATH_STYLE=true             # required for CEPH/MinIO
+S3_PUBLIC_BUCKET=forgecommerce-media
+S3_PUBLIC_BUCKET_URL=https://media.store.example.com
+S3_PRIVATE_BUCKET=forgecommerce-private
+
 SMTP_HOST=localhost, SMTP_PORT=1025, SMTP_FROM=store@example.com
 
 # VAT
@@ -892,3 +929,213 @@ VIES_CACHE_TTL=24h                   # Cache validation results
 - [ ] VIES response validation (don't trust raw SOAP responses blindly)
 - [ ] Country restriction enforcement at API level (not just UI)
 - [ ] VAT rate changes logged with audit trail
+
+---
+
+## Implementation Status (as of 2026-02-25)
+
+### Done — Core Platform
+
+| Component | Status | Details |
+|-----------|--------|---------|
+| **Database schema** | ✅ Complete | 24 migrations, 30+ tables, full VAT/BOM/orders/shipping/discounts |
+| **Go API server** | ✅ Complete | ~28k LoC, dual-port (8080 API, 8081 admin), all middleware wired |
+| **VAT engine** | ✅ Complete | Calculation, EC TEDB sync, euvatrates fallback, VIES, scheduler, cache |
+| **Admin panel** | ✅ Complete | 21 templ templates, 18 handler files, HTMX+Alpine.js, all CRUD |
+| **Auth system** | ✅ Complete | Session-based admin (2FA/TOTP), JWT customer, bcrypt, recovery codes |
+| **Stripe integration** | ✅ Complete | Checkout sessions, webhooks, refunds, test mode |
+| **Storefront (Nuxt 3)** | ✅ ~85% | 7 pages, 6 components, variant picker, VAT display, cart, checkout |
+| **Services** | ✅ Complete | product, variant, attribute, category, bom, order, cart, discount, shipping, rawmaterial, production, media, webhook, report, globalattr |
+| **Testing** | ✅ ~90% | 18 Go test files, 23 Playwright E2E specs, CI/CD pipeline |
+| **Docker** | ✅ Complete | docker-compose.yml (dev), docker-compose.test.yml, multi-stage Dockerfiles |
+| **Documentation** | ✅ Complete | API docs, VAT model, admin guide (49 screenshots), deployment guide |
+| **Global attributes** | ✅ Complete | Templates, metadata schema, product linking |
+| **CSV import/export** | ✅ Complete | Products, raw materials |
+| **Production batches** | ✅ Complete | BOM materialization, batch tracking, completion |
+| **Reports** | ✅ Complete | Sales, VAT per-country, predictions (WMA + YoY) |
+
+### Missing / Not Yet Started
+
+| Feature | Priority | Notes |
+|---------|----------|-------|
+| **Kubernetes manifests** | HIGH | No k8s/ directory yet — needed for deployment |
+| **Guest checkout** | MEDIUM | Storefront currently requires login |
+| **Search** | MEDIUM | No product search (Meilisearch planned for future) |
+| **Wishlist** | LOW | Future storefront feature |
+| **Product reviews** | LOW | Future storefront feature |
+| **Multi-currency** | LOW | EUR only for now (future consideration) |
+| **Multi-language / i18n** | LOW | Future consideration |
+| **S3 media storage** | DONE | Storage interface + local + S3 backends implemented |
+| **OSS (One-Stop Shop)** | LOW | Cross-border EU VAT simplification (future) |
+| **Email templates** | MEDIUM | SMTP configured, templates need design/implementation |
+
+---
+
+## Deployment & Infrastructure
+
+### Target Environment — K3S Kubernetes
+
+The production/staging deployment target is a **K3S cluster** with the following stack:
+
+| Component | Details |
+|-----------|---------|
+| **Kubernetes** | K3S (recent version, standard configuration) |
+| **Ingress** | Traefik (K3S built-in), using **modern CRD-based routing** (`IngressRoute`, `Middleware` CRDs — NOT legacy `Ingress` resources) |
+| **TLS** | Cert-Manager available for automated Let's Encrypt certificates |
+| **Database** | PostgreSQL available on the cluster (host and root `postgres` password provided via `.secrets`) |
+| **Container registry** | Images pushed to registry accessible by the cluster |
+
+### Traefik Ingress — CRD-Based Configuration
+
+Use Traefik's **native CRDs** (not Kubernetes `Ingress` resources):
+
+```yaml
+# Example: IngressRoute for storefront
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: forgecommerce-storefront
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`store.example.com`)
+      kind: Rule
+      services:
+        - name: storefront
+          port: 3000
+    - match: Host(`store.example.com`) && PathPrefix(`/api/`)
+      kind: Rule
+      services:
+        - name: api
+          port: 8080
+  tls:
+    certResolver: letsencrypt  # or reference a Cert-Manager Certificate
+
+# Example: IngressRoute for admin
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: forgecommerce-admin
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`admin.store.example.com`)
+      kind: Rule
+      services:
+        - name: api
+          port: 8081
+  tls:
+    certResolver: letsencrypt
+```
+
+### Secrets & Environment Variables
+
+**Two files — never committed to git:**
+
+| File | Purpose | Used By |
+|------|---------|---------|
+| `.env` | Local development & Docker Compose | `docker-compose.yml`, `make dev`, `go run` |
+| `.secrets` | Kubernetes deployment — all production/staging env vars | K8s manifests, CI/CD pipeline |
+
+**`.secrets` contains** (set by the user, never auto-generated):
+- `POSTGRES_HOST` — PostgreSQL host accessible from the cluster
+- `POSTGRES_PASSWORD` — Root `postgres` user password (used to create the app database/user)
+- `DATABASE_URL` — Full connection string for the app (built from host + credentials)
+- `JWT_SECRET`, `SESSION_SECRET` — Strong random secrets for production
+- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PUBLIC_KEY` — Real Stripe keys
+- `SMTP_*` — Production email configuration
+- All other env vars from the Configuration section above
+
+**Important conventions:**
+- `.env` and `.secrets` are both in `.gitignore` — NEVER commit them
+- `.env.example` serves as the template for both files
+- When creating K8s `Secret` resources, source values from `.secrets`
+- The user (operator) is responsible for populating `.secrets` before deployment
+
+### Testing & Deployment Procedure
+
+Testing is performed **by deploying to Kubernetes** (not via local docker-compose in CI):
+
+```
+1. Build container images (API + Storefront)
+2. Push images to container registry
+3. Deploy to K3S cluster (staging namespace)
+   - Create/update K8s Secret from .secrets
+   - Apply Deployments, Services, IngressRoutes
+   - Run database migrations (init container or Job)
+   - Seed data if needed (Job)
+4. Run Playwright E2E tests against the deployed staging URL
+5. Promote to production namespace (or separate cluster)
+```
+
+**No local docker-compose for E2E in CI** — the cluster IS the test environment. The `docker-compose.test.yml` remains useful for local developer testing only.
+
+### Kubernetes Resource Layout (to be created)
+
+```
+k8s/
+├── base/                    # Kustomize base (shared across envs)
+│   ├── kustomization.yaml
+│   ├── namespace.yaml
+│   ├── api-deployment.yaml
+│   ├── api-service.yaml
+│   ├── storefront-deployment.yaml
+│   ├── storefront-service.yaml
+│   ├── ingressroute.yaml    # Traefik CRD
+│   ├── middleware.yaml       # Traefik CRD (headers, rate-limit, etc.)
+│   ├── migration-job.yaml   # Run DB migrations
+│   └── certificate.yaml     # Cert-Manager Certificate
+├── overlays/
+│   ├── staging/
+│   │   ├── kustomization.yaml
+│   │   ├── patches/
+│   │   └── secrets.yaml     # SealedSecret or ExternalSecret (NOT raw)
+│   └── production/
+│       ├── kustomization.yaml
+│       ├── patches/
+│       └── secrets.yaml
+└── scripts/
+    ├── deploy.sh            # Deploy to cluster from .secrets
+    └── create-secret.sh     # Generate K8s Secret from .secrets file
+```
+
+### Database on Kubernetes
+
+PostgreSQL is already available on the cluster. Connection details:
+- **Host**: provided in `.secrets` as `POSTGRES_HOST`
+- **Root password**: provided in `.secrets` as `POSTGRES_PASSWORD` (the `postgres` superuser)
+- **App setup**: A migration Job or init script should create the `forgecommerce` database and `forge` user if they don't exist, using the root credentials
+- **App connection**: The `DATABASE_URL` in `.secrets` uses the app-level `forge` user, not root
+
+### Container Images
+
+```dockerfile
+# API: api/Dockerfile (existing, multi-stage)
+#   Build: golang:1.25-alpine → Alpine runtime
+#   Includes: migrations, templates, static assets
+#   Ports: 8080 (API), 8081 (Admin)
+
+# Storefront: storefront/Dockerfile (existing)
+#   Build: node → Nuxt 3 SSR
+#   Port: 3000
+```
+
+### Health Checks for K8s Probes
+
+```yaml
+# API readiness/liveness
+livenessProbe:
+  httpGet:
+    path: /api/v1/health
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 15
+readinessProbe:
+  httpGet:
+    path: /api/v1/health
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 5
+```

@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: storefront
+  namespace: yaaiecomm
+  labels:
+    app: forgecommerce
+    component: storefront
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: forgecommerce
+      component: storefront
+  template:
+    metadata:
+      labels:
+        app: forgecommerce
+        component: storefront
+    spec:
+      containers:
+        - name: storefront
+          image: private-registry.default.svc.cluster.local:5000/forgecommerce-storefront:latest
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: NUXT_PUBLIC_API_BASE
+              value: "https://api-yaaiecomm.test.vlah.sh"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi

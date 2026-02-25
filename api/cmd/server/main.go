@@ -25,6 +25,7 @@ import (
 	"github.com/forgecommerce/api/internal/services/discount"
 	"github.com/forgecommerce/api/internal/services/globalattr"
 	"github.com/forgecommerce/api/internal/services/media"
+	"github.com/forgecommerce/api/internal/storage"
 	"github.com/forgecommerce/api/internal/services/order"
 	"github.com/forgecommerce/api/internal/services/production"
 	"github.com/forgecommerce/api/internal/services/product"
@@ -78,6 +79,47 @@ func main() {
 	vatSvc := vat.NewVATService(pool, vatCache, logger)
 	viesClient := vat.NewVIESClient(pool, cfg.VAT.VIESTimeout, cfg.VAT.VIESCacheTTL, logger)
 
+	// Initialize storage backends
+	var publicStore storage.Storage
+	var privateStore storage.Storage
+
+	switch cfg.MediaStorage {
+	case "s3":
+		slog.Info("using S3 storage", "endpoint", cfg.S3.Endpoint, "public_bucket", cfg.S3.PublicBucket)
+		var err error
+		publicStore, err = storage.NewS3(context.Background(), storage.S3Config{
+			Endpoint:       cfg.S3.Endpoint,
+			Region:         cfg.S3.Region,
+			AccessKey:      cfg.S3.AccessKey,
+			SecretKey:      cfg.S3.SecretKey,
+			ForcePathStyle: cfg.S3.ForcePathStyle,
+			Bucket:         cfg.S3.PublicBucket,
+			PublicURL:       cfg.S3.PublicBucketURL,
+		})
+		if err != nil {
+			slog.Error("failed to initialize public S3 storage", "error", err)
+			os.Exit(1)
+		}
+		if cfg.S3.PrivateBucket != "" {
+			privateStore, err = storage.NewS3(context.Background(), storage.S3Config{
+				Endpoint:       cfg.S3.Endpoint,
+				Region:         cfg.S3.Region,
+				AccessKey:      cfg.S3.AccessKey,
+				SecretKey:      cfg.S3.SecretKey,
+				ForcePathStyle: cfg.S3.ForcePathStyle,
+				Bucket:         cfg.S3.PrivateBucket,
+				PublicURL:       "", // private — no public URL
+			})
+			if err != nil {
+				slog.Error("failed to initialize private S3 storage", "error", err)
+				os.Exit(1)
+			}
+		}
+	default:
+		slog.Info("using local storage", "path", cfg.MediaPath)
+		publicStore = storage.NewLocal(cfg.MediaPath, "/media")
+	}
+
 	// Initialize services
 	productSvc := product.NewService(pool, logger)
 	categorySvc := category.NewService(pool, logger)
@@ -92,7 +134,7 @@ func main() {
 	cartSvc := cart.NewService(pool, logger)
 	reportSvc := report.NewService(pool, logger)
 	productionSvc := production.NewService(pool, logger)
-	mediaSvc := media.NewService(pool, cfg.MediaPath, logger)
+	mediaSvc := media.NewService(pool, publicStore, privateStore, logger)
 	webhookSvc := webhook.NewService(pool, logger)
 	globalAttrSvc := globalattr.NewService(pool, logger)
 
@@ -175,8 +217,10 @@ func main() {
 	globalAttrHandler.RegisterRoutes(protectedMux)
 	adminMux.Handle("/admin/", middleware.RequireAuth(authService)(protectedMux))
 
-	// Media file server (uploaded product images)
-	adminMux.Handle("GET /media/", http.StripPrefix("/media/", http.FileServer(http.Dir(cfg.MediaPath))))
+	// Media file server (local storage only — S3 serves directly via public URL)
+	if cfg.MediaStorage != "s3" {
+		adminMux.Handle("GET /media/", http.StripPrefix("/media/", http.FileServer(http.Dir(cfg.MediaPath))))
+	}
 
 	// Root redirect
 	adminMux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
@@ -207,8 +251,10 @@ func main() {
 		fmt.Fprintln(w, `{"status":"ok"}`)
 	})
 
-	// Media file server (uploaded product images, accessible by storefront)
-	apiMux.Handle("GET /media/", http.StripPrefix("/media/", http.FileServer(http.Dir(cfg.MediaPath))))
+	// Media file server (local storage only — S3 serves directly via public URL)
+	if cfg.MediaStorage != "s3" {
+		apiMux.Handle("GET /media/", http.StripPrefix("/media/", http.FileServer(http.Dir(cfg.MediaPath))))
+	}
 
 	// Register public API routes (no auth required)
 	publicHandler.RegisterRoutes(apiMux)
