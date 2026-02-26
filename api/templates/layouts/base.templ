@@ -25,28 +25,57 @@ templ AdminLayout(title string, currentPath string) {
 			<aside class="sidebar" :class="{ 'sidebar-collapsed': !sidebarOpen }">
 				<div class="sidebar-header">
 					<h1 class="logo">FC</h1>
-					<span class="logo-text" x-show="sidebarOpen">ForgeCommerce</span>
+					<span class="logo-text" x-show="sidebarOpen" x-cloak>ForgeCommerce</span>
 				</div>
 				<nav class="sidebar-nav">
-					@navItem("/admin/dashboard", "Dashboard", currentPath)
-					@navItem("/admin/products", "Products", currentPath)
-					@navItem("/admin/categories", "Categories", currentPath)
-					@navItem("/admin/inventory/raw-materials", "Raw Materials", currentPath)
-					@navItem("/admin/production", "Production", currentPath)
-					@navItem("/admin/orders", "Orders", currentPath)
-					@navItem("/admin/customers", "Customers", currentPath)
-					@navItem("/admin/reports/sales", "Reports", currentPath)
-					@navItem("/admin/import", "Import / Export", currentPath)
-					@navItem("/admin/webhooks", "Webhooks", currentPath)
+					@navItem("/admin/dashboard", "Dashboard", currentPath) {
+						@iconDashboard()
+					}
+					@navItem("/admin/products", "Products", currentPath) {
+						@iconProducts()
+					}
+					@navItem("/admin/categories", "Categories", currentPath) {
+						@iconCategories()
+					}
+					@navItem("/admin/inventory/raw-materials", "Raw Materials", currentPath) {
+						@iconRawMaterials()
+					}
+					@navItem("/admin/production", "Production", currentPath) {
+						@iconProduction()
+					}
+					@navItem("/admin/orders", "Orders", currentPath) {
+						@iconOrders()
+					}
+					@navItem("/admin/customers", "Customers", currentPath) {
+						@iconCustomers()
+					}
+					@navItem("/admin/reports/sales", "Reports", currentPath) {
+						@iconReports()
+					}
+					@navItem("/admin/import", "Import / Export", currentPath) {
+						@iconImportExport()
+					}
+					@navItem("/admin/webhooks", "Webhooks", currentPath) {
+						@iconWebhooks()
+					}
 					<hr class="nav-divider"/>
-					@navItem("/admin/global-attributes", "Global Attributes", currentPath)
-					@navItem("/admin/settings/vat", "VAT Settings", currentPath)
-					@navItem("/admin/settings/countries", "Selling Countries", currentPath)
-					@navItem("/admin/users", "Admin Users", currentPath)
+					<div class="nav-section-label" x-show="sidebarOpen" x-cloak>Settings</div>
+					@navItem("/admin/global-attributes", "Global Attributes", currentPath) {
+						@iconGlobalAttrs()
+					}
+					@navItem("/admin/settings/vat", "VAT Settings", currentPath) {
+						@iconVAT()
+					}
+					@navItem("/admin/settings/countries", "Selling Countries", currentPath) {
+						@iconCountries()
+					}
+					@navItem("/admin/users", "Admin Users", currentPath) {
+						@iconUsers()
+					}
 				</nav>
 			</aside>
 			<!-- Main content -->
-			<main class="main-content">
+			<main class="main-content" :class="{ 'main-content-collapsed': !sidebarOpen }">
 				<header class="top-bar">
 					<button class="btn-icon" @click="sidebarOpen = !sidebarOpen">
 						&#9776;
@@ -70,7 +99,69 @@ templ navItem(href string, label string, currentPath string) {
 	<a
 		href={ templ.SafeURL(href) }
 		class={ "nav-link", templ.KV("nav-link-active", currentPath == href) }
+		data-label={ label }
 	>
-		{ label }
+		<span class="nav-icon">
+			{ children... }
+		</span>
+		<span class="nav-label">{ label }</span>
 	</a>
+}
+
+// --- Sidebar icons (Lucide-style, 18x18 stroke icons) ---
+
+templ iconDashboard() {
+	<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"></rect><rect width="7" height="5" x="14" y="3" rx="1"></rect><rect width="7" height="9" x="14" y="12" rx="1"></rect><rect width="7" height="5" x="3" y="16" rx="1"></rect></svg>
+}
+
+templ iconProducts() {
+	<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 22V12"></path></svg>
+}
+
+templ iconCategories() {
+	<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 17 5-5-5-5"></path><path d="M18 17h-5"></path><path d="M18 12h-5"></path><path d="M18 7h-5"></path></svg>
+}
+
+templ iconRawMaterials() {
+	<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"></path><path d="m2 12 8.58 3.91a2 2 0 0 0 1.66 0L21 12"></path><path d="m2 17 8.58 3.91a2 2 0 0 0 1.66 0L21 17"></path></svg>
+}
+
+templ iconProduction() {
+	<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z"></path><path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"></path><path d="M12 2v2"></path><path d="M12 22v-2"></path><path d="m17 20.66-1-1.73"></path><path d="M11 10.27 7 3.34"></path><path d="m20.66 17-1.73-1"></path><path d="m3.34 7 1.73 1"></path><path d="M14 12h8"></path><path d="M2 12h2"></path><path d="m20.66 7-1.73 1"></path><path d="m3.34 17 1.73-1"></path><path d="m17 3.34-1 1.73"></path><path d="m11 13.73-4 6.93"></path></svg>
+}
+
+templ iconOrders() {
+	<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"></path><path d="M3 6h18"></path><path d="M16 10a4 4 0 0 1-8 0"></path></svg>
+}
+
+templ iconCustomers() {
+	<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+}
+
+templ iconReports() {
+	<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="18" y1="20" y2="10"></line><line x1="12" x2="12" y1="20" y2="4"></line><line x1="6" x2="6" y1="20" y2="14"></line></svg>
+}
+
+templ iconImportExport() {
+	<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 16 4 4 4-4"></path><path d="M7 20V4"></path><path d="m21 8-4-4-4 4"></path><path d="M17 4v16"></path></svg>
+}
+
+templ iconWebhooks() {
+	<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
+}
+
+templ iconGlobalAttrs() {
+	<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="4" y1="21" y2="14"></line><line x1="4" x2="4" y1="10" y2="3"></line><line x1="12" x2="12" y1="21" y2="12"></line><line x1="12" x2="12" y1="8" y2="3"></line><line x1="20" x2="20" y1="21" y2="16"></line><line x1="20" x2="20" y1="12" y2="3"></line><line x1="2" x2="6" y1="14" y2="14"></line><line x1="10" x2="14" y1="8" y2="8"></line><line x1="18" x2="22" y1="16" y2="16"></line></svg>
+}
+
+templ iconVAT() {
+	<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" x2="5" y1="5" y2="19"></line><circle cx="6.5" cy="6.5" r="2.5"></circle><circle cx="17.5" cy="17.5" r="2.5"></circle></svg>
+}
+
+templ iconCountries() {
+	<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg>
+}
+
+templ iconUsers() {
+	<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"></path><path d="M9.1 12a2.1 2.1 0 0 1 2.1-2.1"></path><circle cx="12" cy="12" r="3"></circle></svg>
 }
