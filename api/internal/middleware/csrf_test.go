@@ -196,6 +196,51 @@ func TestCSRFToken_MissingContext(t *testing.T) {
 	}
 }
 
+func TestCSRF_ReusesExistingToken(t *testing.T) {
+	handler := CSRF(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	existingToken := "existing-token-value"
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.AddCookie(&http.Cookie{Name: csrfCookieName, Value: existingToken})
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("status: got %d, want 200", rr.Code)
+	}
+
+	// Should NOT set a new cookie since one already exists.
+	for _, c := range rr.Result().Cookies() {
+		if c.Name == csrfCookieName {
+			t.Error("should not set new CSRF cookie when one already exists")
+		}
+	}
+}
+
+func TestCSRF_MutationValidTokenInContext(t *testing.T) {
+	var capturedToken string
+	handler := CSRF(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedToken = CSRFToken(r)
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	token := generateCSRFToken()
+	req := httptest.NewRequest(http.MethodPost, "/test", nil)
+	req.AddCookie(&http.Cookie{Name: csrfCookieName, Value: token})
+	req.Header.Set(csrfHeaderName, token)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200", rr.Code)
+	}
+	if capturedToken != token {
+		t.Errorf("context token: got %q, want %q", capturedToken, token)
+	}
+}
+
 func TestGetCSRFCookie_NoCookie(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	token := getCSRFCookie(req)

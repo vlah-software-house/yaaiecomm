@@ -6,13 +6,13 @@ SELECT * FROM products WHERE slug = $1;
 
 -- name: ListProducts :many
 SELECT * FROM products
-WHERE ($1::text IS NULL OR status = $1::text)
+WHERE ($1::text = '' OR status = $1::text)
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
 
 -- name: CountProducts :one
 SELECT COUNT(*) FROM products
-WHERE ($1::text IS NULL OR status = $1::text);
+WHERE ($1::text = '' OR status = $1::text);
 
 -- name: CreateProduct :one
 INSERT INTO products (
@@ -64,6 +64,6 @@ ON CONFLICT (product_id, category_id) DO UPDATE SET position = EXCLUDED.position
 -- name: SearchProducts :many
 SELECT * FROM products
 WHERE (name ILIKE '%' || $1 || '%' OR sku_prefix ILIKE '%' || $1 || '%')
-AND ($2::text IS NULL OR status = $2::text)
+AND ($2::text = '' OR status = $2::text)
 ORDER BY created_at DESC
 LIMIT $3 OFFSET $4;

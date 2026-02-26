@@ -22,7 +22,7 @@ SELECT
   COALESCE(SUM(vat_total), 0) as vat_collected,
   COALESCE(SUM(total), 0) as gross_revenue,
   COALESCE(SUM(discount_amount), 0) as total_discounts,
-  CASE WHEN COUNT(*) > 0 THEN COALESCE(SUM(total), 0) / COUNT(*) ELSE 0 END as average_order_value
+  CASE WHEN COUNT(*) > 0 THEN ROUND(COALESCE(SUM(total), 0) / COUNT(*), 2) ELSE 0 END::NUMERIC(12,2) as average_order_value
 FROM orders
 WHERE payment_status = 'paid'
   AND created_at >= @from_date

@@ -90,6 +90,42 @@ func TestContainsEvent(t *testing.T) {
 			event:  EventStockLow,
 			want:   true,
 		},
+		{
+			name:   "prefix wildcard order.* does not match orderfoo (no dot)",
+			events: []string{"order.*"},
+			event:  "orderfoo",
+			want:   false,
+		},
+		{
+			name:   "prefix wildcard order.* does not match orderfoo.bar",
+			events: []string{"order.*"},
+			event:  "orderfoo.bar",
+			want:   false,
+		},
+		{
+			name:   "prefix wildcard order.* does not match bare order",
+			events: []string{"order.*"},
+			event:  "order",
+			want:   false,
+		},
+		{
+			name:   "multiple events no match",
+			events: []string{"order.created", "product.updated", "stock.low"},
+			event:  "order.updated",
+			want:   false,
+		},
+		{
+			name:   "nil events list",
+			events: nil,
+			event:  "anything",
+			want:   false,
+		},
+		{
+			name:   "empty slice events list",
+			events: []string{},
+			event:  "anything",
+			want:   false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -164,6 +200,36 @@ func TestSignPayload_Deterministic(t *testing.T) {
 
 	if sig1 != sig2 {
 		t.Error("same inputs should produce identical signatures")
+	}
+}
+
+func TestSignPayload_HexLength(t *testing.T) {
+	sig := signPayload([]byte(`{"test":true}`), "secret")
+
+	// "sha256=" prefix (7 chars) + 64 hex chars = 71 total.
+	if len(sig) != 71 {
+		t.Errorf("signature total length: got %d, want 71", len(sig))
+	}
+
+	hexPart := sig[7:]
+	if _, err := hex.DecodeString(hexPart); err != nil {
+		t.Errorf("hex portion is not valid hex: %v", err)
+	}
+}
+
+func TestSignPayload_EmptySecret(t *testing.T) {
+	sig := signPayload([]byte("payload"), "")
+
+	if len(sig) < 7 || sig[:7] != "sha256=" {
+		t.Errorf("expected sha256= prefix even with empty secret, got %q", sig)
+	}
+
+	// Verify correctness with empty key.
+	mac := hmac.New(sha256.New, []byte(""))
+	mac.Write([]byte("payload"))
+	expected := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+	if sig != expected {
+		t.Errorf("empty secret signature mismatch:\n  got:  %s\n  want: %s", sig, expected)
 	}
 }
 

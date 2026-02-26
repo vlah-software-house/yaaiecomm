@@ -10,10 +10,16 @@ import (
 
 const sessionCookieName = "admin_session"
 
+// SessionValidator validates admin session tokens and returns the associated user.
+// *auth.Service satisfies this interface.
+type SessionValidator interface {
+	ValidateSession(ctx context.Context, token string) (*auth.AdminUser, *auth.Session, error)
+}
+
 // RequireAuth checks for a valid admin session cookie.
 // If invalid, redirects to /admin/login.
 // On success, stores the admin user ID and session token in context.
-func RequireAuth(authService *auth.Service) func(http.Handler) http.Handler {
+func RequireAuth(authService SessionValidator) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			cookie, err := r.Cookie(sessionCookieName)

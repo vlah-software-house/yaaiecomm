@@ -157,7 +157,7 @@ func (h *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, "/admin/products/"+created.ID.String(), http.StatusSeeOther)
+	http.Redirect(w, r, "/admin/products/"+created.ID.String()+"?created=1", http.StatusSeeOther)
 }
 
 // ShowEditProduct handles GET /admin/products/{id}.
@@ -182,6 +182,9 @@ func (h *ProductHandler) ShowEditProduct(w http.ResponseWriter, r *http.Request)
 	}
 
 	data := productToFormData(p, csrfToken)
+	if r.URL.Query().Get("created") == "1" {
+		data.Success = "Product created! Use the tabs above to add images, configure attributes and variants, and more."
+	}
 	admin.ProductFormPage(data).Render(r.Context(), w)
 }
 

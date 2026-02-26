@@ -33,7 +33,7 @@ func (q *Queries) AddProductCategory(ctx context.Context, arg AddProductCategory
 
 const countProducts = `-- name: CountProducts :one
 SELECT COUNT(*) FROM products
-WHERE ($1::text IS NULL OR status = $1::text)
+WHERE ($1::text = '' OR status = $1::text)
 `
 
 func (q *Queries) CountProducts(ctx context.Context, dollar_1 string) (int64, error) {
@@ -242,7 +242,7 @@ func (q *Queries) ListProductCategories(ctx context.Context, productID uuid.UUID
 
 const listProducts = `-- name: ListProducts :many
 SELECT id, name, slug, description, short_description, status, sku_prefix, base_price, compare_at_price, vat_category_id, base_weight_grams, base_dimensions_mm, shipping_extra_fee_per_unit, has_variants, seo_title, seo_description, metadata, created_at, updated_at FROM products
-WHERE ($1::text IS NULL OR status = $1::text)
+WHERE ($1::text = '' OR status = $1::text)
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
 `
@@ -296,7 +296,7 @@ func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]P
 const searchProducts = `-- name: SearchProducts :many
 SELECT id, name, slug, description, short_description, status, sku_prefix, base_price, compare_at_price, vat_category_id, base_weight_grams, base_dimensions_mm, shipping_extra_fee_per_unit, has_variants, seo_title, seo_description, metadata, created_at, updated_at FROM products
 WHERE (name ILIKE '%' || $1 || '%' OR sku_prefix ILIKE '%' || $1 || '%')
-AND ($2::text IS NULL OR status = $2::text)
+AND ($2::text = '' OR status = $2::text)
 ORDER BY created_at DESC
 LIMIT $3 OFFSET $4
 `

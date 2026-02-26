@@ -160,6 +160,7 @@ func (h *WebhookHandler) handleCheckoutSessionCompleted(r *http.Request, event s
 		StripeCheckoutSessionID: &sessionID,
 		PaymentStatus:           "paid",
 		Items:                   []order.CreateOrderItemInput{},
+		Metadata:                json.RawMessage(`{}`),
 	}
 
 	if countryCode != "" {

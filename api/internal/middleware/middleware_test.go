@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -202,6 +203,62 @@ func TestAdminUserFromContext(t *testing.T) {
 				t.Errorf("id: want %q, got %q", tt.wantID, id)
 			}
 		})
+	}
+}
+
+func TestRecover_CatchesErrorPanic(t *testing.T) {
+	logger := slog.Default()
+	middleware := Recover(logger)
+
+	handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		panic(errors.New("database connection lost"))
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/error-panic", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected status 500 after error panic, got %d", rr.Code)
+	}
+}
+
+func TestRecover_CatchesIntPanic(t *testing.T) {
+	logger := slog.Default()
+	middleware := Recover(logger)
+
+	handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		panic(42)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/int-panic", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected status 500 after int panic, got %d", rr.Code)
+	}
+}
+
+func TestRequestLogger_DefaultStatus(t *testing.T) {
+	// Test that the status writer defaults to 200 when handler does not
+	// explicitly call WriteHeader (just writes body directly).
+	logger := slog.Default()
+	middleware := RequestLogger(logger)
+
+	handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Write body without calling WriteHeader explicitly.
+		w.Write([]byte("hello"))
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/implicit-200", nil)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected implicit status 200, got %d", rr.Code)
 	}
 }
 

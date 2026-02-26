@@ -133,6 +133,7 @@ type ProductFormData struct {
 	IsNew            bool
 	CSRFToken        string
 	Error            string
+	Success          string
 }
 
 templ ProductTabs(productID string, activeTab string) {
@@ -184,8 +185,16 @@ templ ProductFormPage(data ProductFormData) {
 				<h2>Edit: { data.Name }</h2>
 			}
 		</div>
+		if data.IsNew {
+			<p class="text-muted mb-2" style="margin-top: -8px;">
+				Start by filling in the basic product details below. Once created, you can add images, configure attributes and variants, set up materials (BOM), and manage VAT settings from the additional tabs.
+			</p>
+		}
 		if !data.IsNew {
 			@ProductTabs(data.ID, "details")
+		}
+		if data.Success != "" {
+			<div class="alert alert-success mb-2">{ data.Success }</div>
 		}
 		if data.Error != "" {
 			<div class="alert alert-error mb-2">{ data.Error }</div>

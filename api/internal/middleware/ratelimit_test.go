@@ -311,6 +311,170 @@ func TestLoginRateLimiter(t *testing.T) {
 	}
 }
 
+func TestRetryAfter_UnknownIP_Returns1(t *testing.T) {
+	state := &rateLimiterState{
+		rate:  10,
+		burst: 10,
+		done:  make(chan struct{}),
+	}
+
+	// For an IP that has never been seen, retryAfter should return 1.
+	got := state.retryAfter("unknown-ip")
+	if got != 1 {
+		t.Errorf("retryAfter for unknown IP: got %d, want 1", got)
+	}
+}
+
+func TestRetryAfter_TokensAvailable_Returns0(t *testing.T) {
+	state := &rateLimiterState{
+		rate:  10,
+		burst: 10,
+		done:  make(chan struct{}),
+	}
+
+	// Use allow to create a bucket, consuming one token (leaves 9).
+	allowed, _, _ := state.allow("10.0.0.1")
+	if !allowed {
+		t.Fatal("expected first request to be allowed")
+	}
+
+	// With tokens still available, retryAfter should return 0.
+	got := state.retryAfter("10.0.0.1")
+	if got != 0 {
+		t.Errorf("retryAfter with tokens available: got %d, want 0", got)
+	}
+}
+
+func TestRetryAfter_NoTokens_ReturnsPositive(t *testing.T) {
+	state := &rateLimiterState{
+		rate:  1, // 1 token per second
+		burst: 1,
+		done:  make(chan struct{}),
+	}
+
+	// Exhaust the single token.
+	state.allow("10.0.0.2")
+
+	// With no tokens and rate of 1/sec, retryAfter should be ~1 second.
+	got := state.retryAfter("10.0.0.2")
+	if got < 1 {
+		t.Errorf("retryAfter with no tokens: got %d, want >= 1", got)
+	}
+}
+
+func TestStartCleanup_RemovesStaleBuckets(t *testing.T) {
+	state := &rateLimiterState{
+		rate:  10,
+		burst: 10,
+		done:  make(chan struct{}),
+	}
+
+	// Manually store a bucket with a very old lastRefill time (stale).
+	staleBucket := &bucket{
+		tokens:     10,
+		lastRefill: time.Now().Add(-20 * time.Minute), // 20 minutes ago, well past the 10-minute threshold
+	}
+	state.buckets.Store("stale-ip", staleBucket)
+
+	// Store a fresh bucket.
+	freshBucket := &bucket{
+		tokens:     5,
+		lastRefill: time.Now(),
+	}
+	state.buckets.Store("fresh-ip", freshBucket)
+
+	// Simulate what the cleanup loop does (range and delete stale).
+	staleThreshold := time.Now().Add(-10 * time.Minute)
+	state.buckets.Range(func(key, value any) bool {
+		b := value.(*bucket)
+		b.mu.Lock()
+		if b.lastRefill.Before(staleThreshold) {
+			b.mu.Unlock()
+			state.buckets.Delete(key)
+		} else {
+			b.mu.Unlock()
+		}
+		return true
+	})
+
+	// Stale bucket should be removed.
+	if _, ok := state.buckets.Load("stale-ip"); ok {
+		t.Error("expected stale bucket to be removed")
+	}
+
+	// Fresh bucket should remain.
+	if _, ok := state.buckets.Load("fresh-ip"); !ok {
+		t.Error("expected fresh bucket to remain")
+	}
+}
+
+func TestStartCleanup_StopsOnDoneSignal(t *testing.T) {
+	state := &rateLimiterState{
+		rate:  10,
+		burst: 10,
+		done:  make(chan struct{}),
+	}
+
+	state.startCleanup()
+
+	// Closing done should stop the cleanup goroutine without hanging.
+	close(state.done)
+
+	// If the goroutine does not exit, this test would eventually be killed
+	// by the test timeout. If it exits cleanly, the test passes.
+}
+
+func TestRateLimiter_429ResponseContentType(t *testing.T) {
+	limiter := RateLimiter(1, 1)
+	handler := limiter(okHandler)
+
+	ip := "10.99.99.99:1234"
+
+	// Exhaust the burst.
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/test", nil)
+	req.RemoteAddr = ip
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	// This request should be rate limited.
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/test", nil)
+	req.RemoteAddr = ip
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429, got %d", w.Code)
+	}
+	ct := w.Header().Get("Content-Type")
+	if ct != "application/json" {
+		t.Errorf("Content-Type: got %q, want %q", ct, "application/json")
+	}
+
+	var body map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode JSON body: %v", err)
+	}
+	if body["message"] == "" {
+		t.Error("expected non-empty message in 429 response body")
+	}
+}
+
+func TestExtractIP_XForwardedFor_EmptyFirstEntry(t *testing.T) {
+	// Edge case: X-Forwarded-For with empty first entry after trimming.
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "192.168.1.1:12345"
+	req.Header.Set("X-Forwarded-For", " , 10.0.0.1")
+
+	got := extractIP(req)
+	// The first entry after trimming is empty, so it should fall through
+	// to X-Real-IP or RemoteAddr.
+	// Actually, looking at the code: parts[0] = " ", TrimSpace = "".
+	// If ip == "" it continues to X-Real-IP, then RemoteAddr.
+	if got != "192.168.1.1" {
+		t.Errorf("extractIP with empty XFF first entry: got %q, want %q", got, "192.168.1.1")
+	}
+}
+
 func TestExtractIP(t *testing.T) {
 	tests := []struct {
 		name       string

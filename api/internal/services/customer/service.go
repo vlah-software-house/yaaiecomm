@@ -138,6 +138,20 @@ func (s *Service) Create(ctx context.Context, params CreateCustomerParams) (db.C
 
 	now := time.Now().UTC()
 
+	// Default nil JSONB fields to empty objects to satisfy NOT NULL constraints.
+	metadata := params.Metadata
+	if metadata == nil {
+		metadata = json.RawMessage(`{}`)
+	}
+	billingAddr := params.DefaultBillingAddress
+	if billingAddr == nil {
+		billingAddr = json.RawMessage(`{}`)
+	}
+	shippingAddr := params.DefaultShippingAddress
+	if shippingAddr == nil {
+		shippingAddr = json.RawMessage(`{}`)
+	}
+
 	customer, err := s.queries.CreateCustomer(ctx, db.CreateCustomerParams{
 		ID:                     uuid.New(),
 		Email:                  params.Email,
@@ -145,13 +159,13 @@ func (s *Service) Create(ctx context.Context, params CreateCustomerParams) (db.C
 		LastName:               params.LastName,
 		Phone:                  params.Phone,
 		PasswordHash:           params.PasswordHash,
-		DefaultBillingAddress:  params.DefaultBillingAddress,
-		DefaultShippingAddress: params.DefaultShippingAddress,
+		DefaultBillingAddress:  billingAddr,
+		DefaultShippingAddress: shippingAddr,
 		AcceptsMarketing:       params.AcceptsMarketing,
 		StripeCustomerID:       params.StripeCustomerID,
 		VatNumber:              params.VatNumber,
 		Notes:                  params.Notes,
-		Metadata:               params.Metadata,
+		Metadata:               metadata,
 		CreatedAt:              now,
 	})
 	if err != nil {

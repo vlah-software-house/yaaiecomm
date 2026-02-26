@@ -173,6 +173,12 @@ func (s *Service) Create(ctx context.Context, params CreateProductParams) (db.Pr
 
 	now := time.Now().UTC()
 
+	// Default nil JSONB fields to empty objects to satisfy NOT NULL constraints.
+	metadata := params.Metadata
+	if metadata == nil {
+		metadata = json.RawMessage(`{}`)
+	}
+
 	product, err := s.queries.CreateProduct(ctx, db.CreateProductParams{
 		ID:                      uuid.New(),
 		Name:                    params.Name,
@@ -190,7 +196,7 @@ func (s *Service) Create(ctx context.Context, params CreateProductParams) (db.Pr
 		HasVariants:             params.HasVariants,
 		SeoTitle:                params.SeoTitle,
 		SeoDescription:          params.SeoDescription,
-		Metadata:                params.Metadata,
+		Metadata:                metadata,
 		CreatedAt:               now,
 	})
 	if err != nil {
@@ -237,6 +243,12 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, params UpdateProduct
 
 	now := time.Now().UTC()
 
+	// Default nil JSONB fields to empty objects to satisfy NOT NULL constraints.
+	metadata := params.Metadata
+	if metadata == nil {
+		metadata = json.RawMessage(`{}`)
+	}
+
 	product, err := s.queries.UpdateProduct(ctx, db.UpdateProductParams{
 		ID:                      id,
 		Name:                    params.Name,
@@ -254,7 +266,7 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, params UpdateProduct
 		HasVariants:             params.HasVariants,
 		SeoTitle:                params.SeoTitle,
 		SeoDescription:          params.SeoDescription,
-		Metadata:                params.Metadata,
+		Metadata:                metadata,
 		UpdatedAt:               now,
 	})
 	if err != nil {

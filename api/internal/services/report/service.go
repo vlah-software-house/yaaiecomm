@@ -147,7 +147,7 @@ func (s *Service) GetSalesReport(ctx context.Context, from, to time.Time) (*Sale
 		VATCollected:      toNumeric(summaryRow.VatCollected),
 		GrossRevenue:      toNumeric(summaryRow.GrossRevenue),
 		TotalDiscounts:    toNumeric(summaryRow.TotalDiscounts),
-		AverageOrderValue: toNumericFromInt32(summaryRow.AverageOrderValue),
+		AverageOrderValue: summaryRow.AverageOrderValue,
 	}
 
 	return &SalesReport{
@@ -320,15 +320,6 @@ func toNumeric(v interface{}) pgtype.Numeric {
 			return pgtype.Numeric{Valid: false}
 		}
 		return n
-	}
-}
-
-// toNumericFromInt32 converts an int32 value to a pgtype.Numeric.
-func toNumericFromInt32(v int32) pgtype.Numeric {
-	return pgtype.Numeric{
-		Int:   big.NewInt(int64(v)),
-		Exp:   0,
-		Valid: true,
 	}
 }
 
