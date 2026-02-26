@@ -308,6 +308,63 @@ func TestMistral_Generate(t *testing.T) {
 	}
 }
 
+func TestAnthropic_Generate(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+		if r.Header.Get("x-api-key") == "" {
+			t.Error("missing x-api-key header")
+		}
+		if r.Header.Get("anthropic-version") != "2023-06-01" {
+			t.Errorf("anthropic-version = %q", r.Header.Get("anthropic-version"))
+		}
+
+		var req anthropicRequest
+		json.NewDecoder(r.Body).Decode(&req)
+		if req.System == "" {
+			t.Error("expected system prompt")
+		}
+		if len(req.Messages) == 0 {
+			t.Error("expected messages")
+		}
+
+		resp := anthropicResponse{
+			Model: req.Model,
+			Content: []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			}{
+				{Type: "text", Text: "Anthropic generated text."},
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	provider := &Anthropic{
+		apiKey: "sk-ant-test",
+		cfg:    config.AIProviderConfig{Model: "claude-sonnet-4-6", ModelContent: "claude-sonnet-4-6"},
+		client: &http.Client{Transport: rewriteTransport{base: srv.Client().Transport, url: srv.URL}},
+	}
+
+	resp, err := provider.Generate(context.Background(), Request{
+		SystemPrompt: "You are a copywriter.",
+		UserPrompt:   "Write a description",
+		MaxTokens:    256,
+		Temperature:  0.7,
+	})
+	if err != nil {
+		t.Fatalf("Generate() error: %v", err)
+	}
+	if resp.Content != "Anthropic generated text." {
+		t.Errorf("Content = %q", resp.Content)
+	}
+	if resp.Provider != "anthropic" {
+		t.Errorf("Provider = %q, want anthropic", resp.Provider)
+	}
+}
+
 // rewriteTransport redirects all requests to the test server URL.
 type rewriteTransport struct {
 	base http.RoundTripper

@@ -55,6 +55,10 @@ func NewRegistry(cfg config.AIConfig, logger *slog.Logger) *Registry {
 		r.providers["mistral"] = NewMistral(cfg.Mistral)
 		logger.Info("AI provider registered", "provider", "mistral", "model", cfg.Mistral.Model)
 	}
+	if cfg.Anthropic.APIKey != "" {
+		r.providers["anthropic"] = NewAnthropic(cfg.Anthropic)
+		logger.Info("AI provider registered", "provider", "anthropic", "model", cfg.Anthropic.Model)
+	}
 
 	return r
 }
@@ -70,7 +74,7 @@ func (r *Registry) Get(name string) (Provider, error) {
 
 // Default returns the first available provider, preferring openai > gemini > mistral.
 func (r *Registry) Default() (Provider, error) {
-	for _, name := range []string{"openai", "gemini", "mistral"} {
+	for _, name := range []string{"openai", "anthropic", "gemini", "mistral"} {
 		if p, ok := r.providers[name]; ok {
 			return p, nil
 		}

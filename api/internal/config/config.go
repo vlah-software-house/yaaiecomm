@@ -60,14 +60,15 @@ type AIProviderConfig struct {
 
 // AIConfig holds settings for all AI providers.
 type AIConfig struct {
-	OpenAI  AIProviderConfig
-	Gemini  AIProviderConfig
-	Mistral AIProviderConfig
+	OpenAI    AIProviderConfig
+	Gemini    AIProviderConfig
+	Mistral   AIProviderConfig
+	Anthropic AIProviderConfig
 }
 
 // HasProviders returns true if at least one AI provider is configured.
 func (c AIConfig) HasProviders() bool {
-	return c.OpenAI.APIKey != "" || c.Gemini.APIKey != "" || c.Mistral.APIKey != ""
+	return c.OpenAI.APIKey != "" || c.Gemini.APIKey != "" || c.Mistral.APIKey != "" || c.Anthropic.APIKey != ""
 }
 
 // AvailableProviders returns the names of configured providers.
@@ -81,6 +82,9 @@ func (c AIConfig) AvailableProviders() []string {
 	}
 	if c.Mistral.APIKey != "" {
 		providers = append(providers, "mistral")
+	}
+	if c.Anthropic.APIKey != "" {
+		providers = append(providers, "anthropic")
 	}
 	return providers
 }
@@ -222,6 +226,12 @@ func loadAIConfig() AIConfig {
 			APIKey:     getEnv("MISTRAL_API_KEY", ""),
 			Model:      getEnv("MISTRAL_MODEL", "mistral-large-latest"),
 			ModelLight: getEnv("MISTRAL_MODEL_LIGHT", "mistral-small-latest"),
+		},
+		Anthropic: AIProviderConfig{
+			APIKey:       getEnv("ANTHROPIC_API_KEY", ""),
+			Model:        getEnv("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
+			ModelLight:   getEnv("ANTHROPIC_MODEL_LIGHT", "claude-haiku-4-5-20251001"),
+			ModelContent: getEnv("ANTHROPIC_MODEL_CONTENT", "claude-sonnet-4-6"),
 		},
 	}
 }
