@@ -33,6 +33,7 @@ type Config struct {
 	SMTPFrom string
 
 	VAT VATConfig
+	AI  AIConfig
 }
 
 // S3Config holds settings for S3-compatible object storage (CEPH, MinIO, AWS).
@@ -45,6 +46,43 @@ type S3Config struct {
 	PublicBucket   string // product images, storefront assets
 	PublicBucketURL string // base URL where public bucket is reachable
 	PrivateBucket  string // exports, invoices, internal files
+}
+
+// AIProviderConfig holds settings for a single AI provider.
+type AIProviderConfig struct {
+	APIKey       string
+	Model        string // default model
+	ModelLight   string // fast/cheap model
+	ModelContent string // content generation model
+	ModelImage   string // image analysis model
+	ModelTemplate string // template/structured output model
+}
+
+// AIConfig holds settings for all AI providers.
+type AIConfig struct {
+	OpenAI  AIProviderConfig
+	Gemini  AIProviderConfig
+	Mistral AIProviderConfig
+}
+
+// HasProviders returns true if at least one AI provider is configured.
+func (c AIConfig) HasProviders() bool {
+	return c.OpenAI.APIKey != "" || c.Gemini.APIKey != "" || c.Mistral.APIKey != ""
+}
+
+// AvailableProviders returns the names of configured providers.
+func (c AIConfig) AvailableProviders() []string {
+	var providers []string
+	if c.OpenAI.APIKey != "" {
+		providers = append(providers, "openai")
+	}
+	if c.Gemini.APIKey != "" {
+		providers = append(providers, "gemini")
+	}
+	if c.Mistral.APIKey != "" {
+		providers = append(providers, "mistral")
+	}
+	return providers
 }
 
 type VATConfig struct {
@@ -99,6 +137,8 @@ func Load() (*Config, error) {
 			VIESTimeout:  getEnvDuration("VIES_TIMEOUT", 10*time.Second),
 			VIESCacheTTL: getEnvDuration("VIES_CACHE_TTL", 24*time.Hour),
 		},
+
+		AI: loadAIConfig(),
 	}
 
 	if cfg.SessionSecret == "" {
@@ -155,9 +195,35 @@ func LoadDev() *Config {
 				VIESTimeout:  getEnvDuration("VIES_TIMEOUT", 10*time.Second),
 				VIESCacheTTL: getEnvDuration("VIES_CACHE_TTL", 24*time.Hour),
 			},
+
+			AI: loadAIConfig(),
 		}
 	}
 	return cfg
+}
+
+func loadAIConfig() AIConfig {
+	return AIConfig{
+		OpenAI: AIProviderConfig{
+			APIKey:        getEnv("OPENAI_API_KEY", ""),
+			Model:         getEnv("OPENAI_MODEL", "gpt-4o"),
+			ModelLight:    getEnv("OPENAI_MODEL_LIGHT", "gpt-4o-mini"),
+			ModelContent:  getEnv("OPENAI_MODEL_CONTENT", "gpt-4o"),
+			ModelImage:    getEnv("OPENAI_MODEL_IMAGE", "gpt-4o"),
+			ModelTemplate: getEnv("OPENAI_MODEL_TEMPLATE", "gpt-4o"),
+		},
+		Gemini: AIProviderConfig{
+			APIKey:     getEnv("GEMINI_API_KEY", ""),
+			Model:      getEnv("GEMINI_MODEL", "gemini-2.0-flash"),
+			ModelLight: getEnv("GEMINI_MODEL_LIGHT", "gemini-2.0-flash-lite"),
+			ModelImage: getEnv("GEMINI_MODEL_IMAGE", "gemini-2.0-flash"),
+		},
+		Mistral: AIProviderConfig{
+			APIKey:     getEnv("MISTRAL_API_KEY", ""),
+			Model:      getEnv("MISTRAL_MODEL", "mistral-large-latest"),
+			ModelLight: getEnv("MISTRAL_MODEL_LIGHT", "mistral-small-latest"),
+		},
+	}
 }
 
 func getEnv(key, fallback string) string {

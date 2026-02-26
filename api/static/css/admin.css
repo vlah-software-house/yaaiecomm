@@ -175,6 +175,45 @@ kbd { display: inline-block; padding: 2px 6px; background: var(--gray-100); bord
 #batch-actions { display: none; align-items: center; gap: 12px; padding: 8px 16px; background: #dbeafe; border-radius: var(--radius); margin-bottom: 12px; }
 .batch-count { font-weight: 600; color: var(--primary); }
 
+/* AI Copilot floating panel */
+.ai-copilot-toggle { position: fixed; bottom: 20px; right: 20px; width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, #7c3aed, #2563eb); color: white; border: none; cursor: pointer; z-index: 250; box-shadow: 0 4px 12px rgba(37,99,235,0.35); display: flex; align-items: center; justify-content: center; transition: transform 0.2s, box-shadow 0.2s; }
+.ai-copilot-toggle:hover { transform: scale(1.08); box-shadow: 0 6px 20px rgba(37,99,235,0.45); }
+.ai-copilot-toggle svg { width: 22px; height: 22px; }
+.ai-copilot-panel { position: fixed; bottom: 80px; right: 20px; width: 360px; max-height: 520px; background: white; border: 1px solid var(--gray-200); border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.15); z-index: 250; display: flex; flex-direction: column; overflow: hidden; }
+.ai-copilot-header { padding: 12px 16px; background: linear-gradient(135deg, #7c3aed, #2563eb); color: white; display: flex; align-items: center; justify-content: space-between; }
+.ai-copilot-header h4 { font-size: 14px; font-weight: 600; margin: 0; display: flex; align-items: center; gap: 8px; }
+.ai-copilot-close { background: none; border: none; color: white; cursor: pointer; font-size: 18px; padding: 0 4px; opacity: 0.8; }
+.ai-copilot-close:hover { opacity: 1; }
+.ai-copilot-body { padding: 12px 16px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 10px; }
+.ai-copilot-provider { display: flex; align-items: center; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--gray-100); }
+.ai-copilot-provider label { font-size: 12px; font-weight: 500; color: var(--gray-500); white-space: nowrap; }
+.ai-copilot-provider select { flex: 1; padding: 5px 8px; border: 1px solid var(--gray-200); border-radius: 4px; font-size: 13px; }
+.ai-tool-btn { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--gray-200); border-radius: 6px; background: white; cursor: pointer; font-size: 13px; color: var(--gray-700); transition: all 0.15s; width: 100%; text-align: left; }
+.ai-tool-btn:hover { background: var(--gray-50); border-color: var(--primary); color: var(--primary); }
+.ai-tool-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.ai-tool-btn .ai-tool-icon { width: 18px; height: 18px; flex-shrink: 0; color: #7c3aed; }
+.ai-tool-btn .ai-tool-label { flex: 1; }
+.ai-tool-btn .ai-tool-spinner { display: none; width: 14px; height: 14px; border: 2px solid var(--gray-200); border-top-color: var(--primary); border-radius: 50%; animation: ai-spin 0.6s linear infinite; }
+.ai-tool-btn.ai-loading .ai-tool-spinner { display: block; }
+.ai-tool-btn.ai-loading .ai-tool-icon { display: none; }
+@keyframes ai-spin { to { transform: rotate(360deg); } }
+.ai-result { padding: 10px 12px; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: 6px; font-size: 13px; line-height: 1.5; color: var(--gray-700); max-height: 200px; overflow-y: auto; white-space: pre-wrap; }
+.ai-result-actions { display: flex; gap: 6px; margin-top: 6px; }
+.ai-result-actions .btn { font-size: 12px; padding: 4px 10px; }
+.ai-result-meta { font-size: 11px; color: var(--gray-500); margin-top: 4px; }
+
+/* AI wand button (inline next to form fields) */
+.ai-wand { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 1px solid var(--gray-200); border-radius: 4px; background: white; cursor: pointer; color: #7c3aed; transition: all 0.15s; flex-shrink: 0; padding: 0; }
+.ai-wand:hover { background: #f5f3ff; border-color: #7c3aed; }
+.ai-wand svg { width: 14px; height: 14px; }
+.ai-wand:disabled { opacity: 0.4; cursor: not-allowed; }
+.form-group-ai { display: flex; align-items: flex-end; gap: 6px; }
+.form-group-ai .form-group { flex: 1; }
+
+/* AI fill animation */
+@keyframes ai-glow { 0% { box-shadow: 0 0 0 3px rgba(124,58,237,0.2); } 100% { box-shadow: 0 0 0 0 rgba(124,58,237,0); } }
+.ai-filled { animation: ai-glow 1.5s ease-out; }
+
 /* Responsive */
 @media (max-width: 768px) {
   .sidebar { width: var(--sidebar-collapsed); }

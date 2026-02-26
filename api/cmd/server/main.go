@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/forgecommerce/api/internal/ai"
 	"github.com/forgecommerce/api/internal/auth"
 	"github.com/forgecommerce/api/internal/config"
 	"github.com/forgecommerce/api/internal/database"
@@ -138,6 +139,10 @@ func main() {
 	webhookSvc := webhook.NewService(pool, logger)
 	globalAttrSvc := globalattr.NewService(pool, logger)
 
+	// Initialize AI services
+	aiRegistry := ai.NewRegistry(cfg.AI, logger)
+	aiSvc := ai.NewService(aiRegistry, logger)
+
 	// Initialize public API handlers
 	queries := db.New(pool)
 	publicHandler := apihandlers.NewPublicHandler(productSvc, categorySvc, variantSvc, pool, logger)
@@ -172,6 +177,7 @@ func main() {
 	adminWebhookHandler := adminhandlers.NewWebhookHandler(webhookSvc, logger)
 	csvioHandler := adminhandlers.NewCSVIOHandler(productSvc, rawMaterialSvc, orderSvc, logger)
 	globalAttrHandler := adminhandlers.NewGlobalAttributeHandler(globalAttrSvc, productSvc, logger)
+	aiHandler := adminhandlers.NewAIHandler(aiSvc, logger)
 
 	// Admin server (HTMX + templ)
 	adminMux := http.NewServeMux()
@@ -215,6 +221,7 @@ func main() {
 	adminWebhookHandler.RegisterRoutes(protectedMux)
 	csvioHandler.RegisterRoutes(protectedMux)
 	globalAttrHandler.RegisterRoutes(protectedMux)
+	aiHandler.RegisterRoutes(protectedMux)
 	adminMux.Handle("/admin/", middleware.RequireAuth(authService)(protectedMux))
 
 	// Media file server (local storage only — S3 serves directly via public URL)

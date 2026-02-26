@@ -268,4 +268,55 @@
     }
   });
 
+  // ─── AI Copilot ────────────────────────────────────────────────
+  // Floating AI assistant for product content generation.
+  // Communicates with POST /admin/ai/generate (JSON API).
+
+  window.ForgeCopilot = {
+    // Generate content via the AI backend.
+    generate: function (task, provider, productName, context) {
+      context = context || {};
+
+      // Collect product context from the current form
+      var descEl = document.getElementById('description');
+      var shortDescEl = document.getElementById('short_description');
+      if (descEl && descEl.value && !context.description) {
+        context.description = descEl.value;
+      }
+      if (shortDescEl && shortDescEl.value && !context.short_description) {
+        context.short_description = shortDescEl.value;
+      }
+
+      var csrfEl = document.querySelector('input[name="csrf_token"]');
+      var headers = { 'Content-Type': 'application/json' };
+      if (csrfEl) headers['X-CSRF-Token'] = csrfEl.value;
+
+      return fetch('/admin/ai/generate', {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({
+          provider: provider || '',
+          task: task,
+          product_name: productName,
+          context: context,
+        }),
+      }).then(function (resp) {
+        return resp.json().then(function (data) {
+          if (!resp.ok) throw new Error(data.error || 'Generation failed');
+          return data;
+        });
+      });
+    },
+
+    // Apply generated content to a form field.
+    applyToField: function (fieldId, content) {
+      var field = document.getElementById(fieldId);
+      if (!field) return;
+      field.value = content;
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+      field.classList.add('ai-filled');
+      setTimeout(function () { field.classList.remove('ai-filled'); }, 2000);
+    },
+  };
+
 })();
